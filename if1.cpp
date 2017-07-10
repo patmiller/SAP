@@ -4,50 +4,23 @@
 
 typedef struct {
   PyObject_HEAD
-  PyObject* module;
-  unsigned long code;
-  unsigned long aux;
-  PyObject* weak1;
-  PyObject* weak2;
+  PyObject* module; // Weak link to module
+  PyObject* parent;
+  long opcode;
+  
+  // Optional name (function graphs)
   PyObject* name;
 
-  // Weak reference slot
+  // Weak reference support
   PyObject* weak;
-} pIF1_TypeObject;
-const char* pIF1_type_doc =
-  "TODO: Add docsn for type\n"
-  ;
+} IF1_NodeObject;
 
-static PyMemberDef type_members[] = {
-  {(char*)"code",T_LONG,offsetof(pIF1_TypeObject,code),READONLY,(char*)"type code: IFArray, IFBasic..."},
-  {(char*)"name",T_OBJECT,offsetof(pIF1_TypeObject,name),0,(char*)"type name or None"},
-  {NULL}  /* Sentinel */
-};
+const char* IF1_node_doc = "TBD: node";
 
-typedef struct {
-  PyObject_HEAD
-  PyObject* dict;
-  PyObject* types;
-  PyObject* pragmas;
-
-  // Weak reference slot
-  PyObject* weak;
-} pIF1_ModuleObject;
-const char* pIF1_module_doc =
-  "TODO: Add docs for module\n"
-  ;
-static PyMemberDef module_members[] = {
-  {(char*)"types",T_OBJECT_EX,offsetof(pIF1_ModuleObject,types),0,(char*)"type table"},
-  {(char*)"pragmas",T_OBJECT_EX,offsetof(pIF1_ModuleObject,pragmas),0,(char*)"pragma set"},
-  {(char*)"__dict__",T_OBJECT_EX,offsetof(pIF1_ModuleObject,dict),0,(char*)"instance dictionary"},
-  {NULL}  /* Sentinel */
-};
-
-
-static PyTypeObject pIF1_TypeType = {
+static PyTypeObject IF1_NodeType = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    "pIF1.Type",             /* tp_name */
-    sizeof(pIF1_TypeObject), /* tp_basicsize */
+    "IF1.Node",             /* tp_name */
+    sizeof(IF1_NodeObject), /* tp_basicsize */
     0,                         /* tp_itemsize */
     0,                         /* tp_dealloc */
     0,                         /* tp_print */
@@ -65,17 +38,89 @@ static PyTypeObject pIF1_TypeType = {
     0,                         /* tp_setattro */
     0,                         /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT,        /* tp_flags */
-    pIF1_type_doc,             /* tp_doc */
+    IF1_node_doc,             /* tp_doc */
     0,                       // tp_traverse
     0,                       // tp_clear
     0,                       // tp_richcompare
-    offsetof(pIF1_TypeObject,weak) // tp_weaklistoffset
+    offsetof(IF1_NodeObject,weak) // tp_weaklistoffset
+};
+
+typedef struct {
+  PyObject_HEAD
+  PyObject* module; // Weak link to module
+  unsigned long code;
+  unsigned long aux;
+  PyObject* weak1;
+  PyObject* weak2;
+  PyObject* name;
+
+  // Weak reference slot
+  PyObject* weak;
+} IF1_TypeObject;
+const char* IF1_type_doc =
+  "TODO: Add docsn for type\n"
+  ;
+
+static PyMemberDef type_members[] = {
+  {(char*)"code",T_LONG,offsetof(IF1_TypeObject,code),READONLY,(char*)"type code: IF_Array, IF_Basic..."},
+  {(char*)"name",T_OBJECT,offsetof(IF1_TypeObject,name),0,(char*)"type name or None"},
+  {NULL}  /* Sentinel */
+};
+
+typedef struct {
+  PyObject_HEAD
+  PyObject* dict;
+  PyObject* types;
+  PyObject* pragmas;
+  PyObject* functions;
+
+  // Weak reference slot
+  PyObject* weak;
+} IF1_ModuleObject;
+const char* IF1_module_doc =
+  "TODO: Add docs for module\n"
+  ;
+static PyMemberDef module_members[] = {
+  {(char*)"__dict__",T_OBJECT_EX,offsetof(IF1_ModuleObject,dict),0,(char*)"instance dictionary"},
+  {(char*)"types",T_OBJECT_EX,offsetof(IF1_ModuleObject,types),0,(char*)"type table"},
+  {(char*)"pragmas",T_OBJECT_EX,offsetof(IF1_ModuleObject,pragmas),0,(char*)"pragma set"},
+  {(char*)"functions",T_OBJECT_EX,offsetof(IF1_ModuleObject,functions),0,(char*)"function graphs"},
+  {NULL}  /* Sentinel */
+};
+
+
+static PyTypeObject IF1_TypeType = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    "IF1.Type",             /* tp_name */
+    sizeof(IF1_TypeObject), /* tp_basicsize */
+    0,                         /* tp_itemsize */
+    0,                         /* tp_dealloc */
+    0,                         /* tp_print */
+    0,                         /* tp_getattr */
+    0,                         /* tp_setattr */
+    0,                         /* tp_compare */
+    0,                         /* tp_repr */
+    0,                         /* tp_as_number */
+    0,                         /* tp_as_sequence */
+    0,                         /* tp_as_mapping */
+    0,                         /* tp_hash */
+    0,                         /* tp_call */
+    0,                         /* tp_str */
+    0,                         /* tp_getattro */
+    0,                         /* tp_setattro */
+    0,                         /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT,        /* tp_flags */
+    IF1_type_doc,             /* tp_doc */
+    0,                       // tp_traverse
+    0,                       // tp_clear
+    0,                       // tp_richcompare
+    offsetof(IF1_TypeObject,weak) // tp_weaklistoffset
 };
 
 PyNumberMethods type_number;
 
 void type_dealloc(PyObject* pySelf) {
-  pIF1_TypeObject* self = reinterpret_cast<pIF1_TypeObject*>(pySelf);
+  IF1_TypeObject* self = reinterpret_cast<IF1_TypeObject*>(pySelf);
   if (self->weak) PyObject_ClearWeakRefs(pySelf);
 
   Py_XDECREF(self->module);
@@ -86,10 +131,10 @@ void type_dealloc(PyObject* pySelf) {
 }
 
 long type_label(PyObject* pySelf) {
-  pIF1_TypeObject* self = reinterpret_cast<pIF1_TypeObject*>(pySelf);
+  IF1_TypeObject* self = reinterpret_cast<IF1_TypeObject*>(pySelf);
   PyObject* w = PyWeakref_GET_OBJECT(self->module);
   if (w == Py_None) { PyErr_SetString(PyExc_RuntimeError,"disconnected type"); return -1; }
-  pIF1_ModuleObject* m = reinterpret_cast<pIF1_ModuleObject*>(w);
+  IF1_ModuleObject* m = reinterpret_cast<IF1_ModuleObject*>(w);
   for(long label=0; label < PyList_GET_SIZE(m->types); ++label) {
     if (PyList_GET_ITEM(m->types,label) == pySelf) return label+1;
   }
@@ -108,7 +153,7 @@ PyObject* type_int(PyObject* self) {
 }
 
 PyObject* type_str(PyObject* pySelf) {
-  pIF1_TypeObject* self = reinterpret_cast<pIF1_TypeObject*>(pySelf);
+  IF1_TypeObject* self = reinterpret_cast<IF1_TypeObject*>(pySelf);
 
   static const char* flavor[] = {"array","basic","field","function","multiple","record","stream","tag","tuple","union"};
   static PyObject* arrow = NULL;
@@ -142,14 +187,14 @@ PyObject* type_str(PyObject* pySelf) {
   }
 
   // If we named the type, just use the name (unless it is a tuple, field, or tag)
-  if (self->name && self->code != IFTuple && self->code != IFField && self->code != IFTag) {
+  if (self->name && self->code != IF_Tuple && self->code != IF_Field && self->code != IF_Tag) {
     Py_INCREF(self->name); 
     return self->name;
   }
 
   switch(self->code) {
-  case IFRecord:
-  case IFUnion: {
+  case IF_Record:
+  case IF_Union: {
     PyObject* basetype = PyWeakref_GET_OBJECT(self->weak1);
     if (basetype == Py_None) return PyErr_Format(PyExc_RuntimeError,"disconnected structure");
     PyObject* base /*owned*/ = PyObject_Str(basetype);
@@ -159,9 +204,9 @@ PyObject* type_str(PyObject* pySelf) {
     return result;
   }
 
-  case IFArray:
-  case IFMultiple:
-  case IFStream: {
+  case IF_Array:
+  case IF_Multiple:
+  case IF_Stream: {
     PyObject* basetype = PyWeakref_GET_OBJECT(self->weak1);
     if (basetype == Py_None) return PyErr_Format(PyExc_RuntimeError,"disconnected base type");
     PyObject* base /*owned*/ = PyObject_Str(basetype);
@@ -170,11 +215,11 @@ PyObject* type_str(PyObject* pySelf) {
     Py_DECREF(base);
     return result;
   }
-  case IFBasic:
+  case IF_Basic:
     return PyString_FromFormat("Basic(%ld)",self->aux);
-  case IFField:
-  case IFTag:
-  case IFTuple: {
+  case IF_Field:
+  case IF_Tag:
+  case IF_Tuple: {
     PyObject* result = PyString_FromString("");
     if (!result) return NULL;
     PyString_Concat(&result,lparen);
@@ -201,14 +246,14 @@ PyObject* type_str(PyObject* pySelf) {
 
       PyObject* next = self->weak2?PyWeakref_GET_OBJECT(self->weak2):NULL;
       if (next == Py_None) return PyErr_Format(PyExc_RuntimeError,"disconnected tuple element link");
-      self = reinterpret_cast<pIF1_TypeObject*>(next);
+      self = reinterpret_cast<IF1_TypeObject*>(next);
       if (self) PyString_Concat(&result,comma);
       if (!result) return NULL;
     }
     PyString_Concat(&result,rparen);
     return result;
   }
-  case IFFunction: {
+  case IF_Function: {
     PyObject* intype = (self->weak1)?PyWeakref_GET_OBJECT(self->weak1):NULL;
     if (intype == Py_None) return PyErr_Format(PyExc_RuntimeError,"disconnected function input");
 
@@ -229,29 +274,29 @@ PyObject* type_str(PyObject* pySelf) {
 }
 
 PyObject* type_get_if1(PyObject* pySelf,void*) {
-  pIF1_TypeObject* self = reinterpret_cast<pIF1_TypeObject*>(pySelf);
+  IF1_TypeObject* self = reinterpret_cast<IF1_TypeObject*>(pySelf);
   long label = type_label(pySelf);
   if (label < 0) return NULL;
 
   switch(self->code) {
     // Wild is a special case
-  case IFWild:
+  case IF_Wild:
     if (self->name && PyString_Check(self->name))
       return PyString_FromFormat("T %ld %ld %%na=%s",label,self->code,PyString_AS_STRING(self->name));
     return PyString_FromFormat("T %ld %ld",label,self->code);
 
     // Basic uses the aux, not the weak fields
-  case IFBasic:
+  case IF_Basic:
     if (self->name && PyString_Check(self->name)) 
       return PyString_FromFormat("T %ld %ld %ld %%na=%s",label,self->code,self->aux,PyString_AS_STRING(self->name));
     return PyString_FromFormat("T %ld %ld %ld",label,self->code,self->aux);
 
     // One parameter case
-  case IFArray:
-  case IFMultiple:
-  case IFRecord:
-  case IFStream:
-  case IFUnion: {
+  case IF_Array:
+  case IF_Multiple:
+  case IF_Record:
+  case IF_Stream:
+  case IF_Union: {
     PyObject* one = PyWeakref_GET_OBJECT(self->weak1);
     if (one == Py_None) return PyErr_Format(PyExc_RuntimeError,"disconnected type");
     long one_label = type_label(one);
@@ -287,19 +332,19 @@ PyObject* type_get_if1(PyObject* pySelf,void*) {
   return PyErr_Format(PyExc_NotImplementedError,"finish get if1 for %ld\n",self->code);
 
 #if 0
-  pIF1_TypeObject* self = reinterpret_cast<pIF1_TypeObject*>(pySelf);
+  IF1_TypeObject* self = reinterpret_cast<IF1_TypeObject*>(pySelf);
 
   switch(self->code) {
     // No parameter case
-  case IFWild:
+  case IF_Wild:
     if (self->name && PyString_Check(self->name)) 
       return PyString_FromFormat("T %ld %ld %%na=%s",type_label(pySelf),self->code,PyString_AS_STRING(self->name));
     return PyString_FromFormat("T %ld %ld",type_label(pySelf),self->code);
 
     // One parameter case (int)
-  case IFArray:
-  case IFBasic:
-  case IFStream:
+  case IF_Array:
+  case IF_Basic:
+  case IF_Stream:
     if (self->name && PyString_Check(self->name)) 
       return PyString_FromFormat("T %ld %ld %ld %%na=%s",type_label(pySelf),self->code,self->parameter1,PyString_AS_STRING(self->name));
     return PyString_FromFormat("T %ld %ld %ld",type_label(pySelf),self->code,self->parameter1);
@@ -316,14 +361,14 @@ PyObject* type_get_if1(PyObject* pySelf,void*) {
 }
 
 PyObject* type_get_aux(PyObject* pySelf,void*) {
-  pIF1_TypeObject* self = reinterpret_cast<pIF1_TypeObject*>(pySelf);
-  if (self->code == IFBasic) return PyInt_FromLong(self->aux);
+  IF1_TypeObject* self = reinterpret_cast<IF1_TypeObject*>(pySelf);
+  if (self->code == IF_Basic) return PyInt_FromLong(self->aux);
   Py_INCREF(Py_None);
   return Py_None;
 }
 
 PyObject* type_get_parameter1(PyObject* pySelf,void*) {
-  pIF1_TypeObject* self = reinterpret_cast<pIF1_TypeObject*>(pySelf);
+  IF1_TypeObject* self = reinterpret_cast<IF1_TypeObject*>(pySelf);
   if (!self->weak1) {
     Py_INCREF(Py_None);
     return Py_None;
@@ -337,7 +382,7 @@ PyObject* type_get_parameter1(PyObject* pySelf,void*) {
 }
 
 PyObject* type_get_parameter2(PyObject* pySelf,void*) {
-  pIF1_TypeObject* self = reinterpret_cast<pIF1_TypeObject*>(pySelf);
+  IF1_TypeObject* self = reinterpret_cast<IF1_TypeObject*>(pySelf);
   if (!self->weak2) {
     Py_INCREF(Py_None);
     return Py_None;
@@ -362,10 +407,10 @@ PyGetSetDef type_getset[] = {
   {NULL}
 };
 
-static PyTypeObject pIF1_ModuleType = {
+static PyTypeObject IF1_ModuleType = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    "pIF1.Module",             /* tp_name */
-    sizeof(pIF1_ModuleObject), /* tp_basicsize */
+    "IF1.Module",             /* tp_name */
+    sizeof(IF1_ModuleObject), /* tp_basicsize */
     0,                         /* tp_itemsize */
     0,                         /* tp_dealloc */
     0,                         /* tp_print */
@@ -383,11 +428,11 @@ static PyTypeObject pIF1_ModuleType = {
     0,                         /* tp_setattro */
     0,                         /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT,        /* tp_flags */
-    pIF1_module_doc,           /* tp_doc */
+    IF1_module_doc,           /* tp_doc */
     0,                       // tp_traverse
     0,                       // tp_clear
     0,                       // tp_richcompare
-    offsetof(pIF1_ModuleObject,weak) // tp_weaklistoffset
+    offsetof(IF1_ModuleObject,weak) // tp_weaklistoffset
 };
 
 static PyObject* rawtype(PyObject* module,
@@ -398,13 +443,13 @@ static PyObject* rawtype(PyObject* module,
                          PyObject* name,
                          const char* cname) {
 
-  PyObject* typelist /*borrowed*/ = reinterpret_cast<pIF1_ModuleObject*>(module)->types;
+  PyObject* typelist /*borrowed*/ = reinterpret_cast<IF1_ModuleObject*>(module)->types;
 
   // We may already have this type (possibly with a different name). In IF1 those are equivalent,
   // so return that
   for(ssize_t i=0;i<PyList_GET_SIZE(typelist);++i) {
     PyObject* p /*borrowed*/ = PyList_GET_ITEM(typelist,i);
-    pIF1_TypeObject* t = reinterpret_cast<pIF1_TypeObject*>(p);
+    IF1_TypeObject* t = reinterpret_cast<IF1_TypeObject*>(p);
     if (t->code != code) continue;
     if (t->aux != aux) continue;
     PyObject* strong = (t->weak1)?PyWeakref_GET_OBJECT(t->weak1):NULL;
@@ -415,9 +460,9 @@ static PyObject* rawtype(PyObject* module,
     return p;
   }
 
-  PyObject* result /*owned*/ = PyType_GenericNew(&pIF1_TypeType,NULL,NULL);
+  PyObject* result /*owned*/ = PyType_GenericNew(&IF1_TypeType,NULL,NULL);
   if (!result) return NULL;
-  pIF1_TypeObject* T = reinterpret_cast<pIF1_TypeObject*>(result);
+  IF1_TypeObject* T = reinterpret_cast<IF1_TypeObject*>(result);
   T->module = NULL;
   T->weak1 = NULL;
   T->weak2 = NULL;
@@ -445,7 +490,7 @@ static PyObject* rawtype(PyObject* module,
   return result;
 }
 
-static PyObject* rawtype(pIF1_ModuleObject* module,
+static PyObject* rawtype(IF1_ModuleObject* module,
                          unsigned long code,
                          unsigned long aux,
                          PyObject* sub1,
@@ -465,29 +510,29 @@ static ssize_t addtype(PyObject* weak, PyObject* types, unsigned long code, unsi
   // If we already have an item, return it's offset
   for(ssize_t i=0;i<PyList_GET_SIZE(types);++i) {
     PyObject* p /*borrowed*/ = PyList_GET_ITEM(types,i);
-    pIF1_TypeObject* t = reinterpret_cast<pIF1_TypeObject*>(p);
+    IF1_TypeObject* t = reinterpret_cast<IF1_TypeObject*>(p);
     if (t->code == code && parameter1 == t->parameter1 && parameter2 == t->parameter2 ) return i;
   }
 
-  PyObject* a = PyType_GenericNew(&pIF1_TypeType,NULL,NULL);
-  Py_INCREF(((pIF1_TypeObject*)a)->module = weak);
-  ((pIF1_TypeObject*)a)->code = code;
-  ((pIF1_TypeObject*)a)->parameter1 = parameter1;
-  ((pIF1_TypeObject*)a)->parameter2 = parameter2;
+  PyObject* a = PyType_GenericNew(&IF1_TypeType,NULL,NULL);
+  Py_INCREF(((IF1_TypeObject*)a)->module = weak);
+  ((IF1_TypeObject*)a)->code = code;
+  ((IF1_TypeObject*)a)->parameter1 = parameter1;
+  ((IF1_TypeObject*)a)->parameter2 = parameter2;
   if (name) {
-    Py_INCREF(((pIF1_TypeObject*)a)->name = name);
+    Py_INCREF(((IF1_TypeObject*)a)->name = name);
   } else if (cname) {
-    ((pIF1_TypeObject*)a)->name = PyString_FromString(cname);
-    if (!((pIF1_TypeObject*)a)->name) return -1;
+    ((IF1_TypeObject*)a)->name = PyString_FromString(cname);
+    if (!((IF1_TypeObject*)a)->name) return -1;
   } else {
-    ((pIF1_TypeObject*)a)->name = NULL;
+    ((IF1_TypeObject*)a)->name = NULL;
   }
   if (PyList_Append(types,a) != 0) return -1;
   Py_DECREF(a);
   return PyList_GET_SIZE(types)-1;
 }
 
-static PyObject* addtype(pIF1_ModuleObject* self, unsigned long code, unsigned long parameter1, unsigned long parameter2, PyObject* name) {
+static PyObject* addtype(IF1_ModuleObject* self, unsigned long code, unsigned long parameter1, unsigned long parameter2, PyObject* name) {
   PyObject* weak /*owned*/= PyWeakref_NewRef((PyObject*)self,NULL);
   if (!weak) return NULL;
   ssize_t idx = addtype(weak,self->types,code,parameter1,parameter2,name,NULL);
@@ -500,7 +545,7 @@ static PyObject* addtype(pIF1_ModuleObject* self, unsigned long code, unsigned l
 #endif
 
 int module_init(PyObject* pySelf, PyObject* args, PyObject* kwargs) {
-  pIF1_ModuleObject* self = reinterpret_cast<pIF1_ModuleObject*>(pySelf);
+  IF1_ModuleObject* self = reinterpret_cast<IF1_ModuleObject*>(pySelf);
   self->types = NULL;
   self->pragmas = NULL;
 
@@ -513,51 +558,57 @@ int module_init(PyObject* pySelf, PyObject* args, PyObject* kwargs) {
   self->pragmas = PyDict_New();
   if (!self->pragmas) return -1;
 
-  PyObject* boolean /*owned*/ = rawtype(pySelf,IFBasic,IFBoolean,NULL,NULL,NULL,"boolean");
+  self->functions = PyList_New(0);
+  if (!self->functions) return -1;
+
+  PyObject* boolean /*owned*/ = rawtype(pySelf,IF_Basic,IF_Boolean,NULL,NULL,NULL,"boolean");
   if (!boolean) return -1;
   Py_DECREF(boolean);
 
-  PyObject* character /*owned*/ = rawtype(pySelf,IFBasic,IFCharacter,NULL,NULL,NULL,"character");
+  PyObject* character /*owned*/ = rawtype(pySelf,IF_Basic,IF_Character,NULL,NULL,NULL,"character");
   if (!character) return -1;
   Py_DECREF(character);
 
-  PyObject* doublereal /*owned*/ = rawtype(pySelf,IFBasic,IFDoubleReal,NULL,NULL,NULL,"doublereal");
+  PyObject* doublereal /*owned*/ = rawtype(pySelf,IF_Basic,IF_DoubleReal,NULL,NULL,NULL,"doublereal");
   if (!doublereal) return -1;
   Py_DECREF(doublereal);
 
-  PyObject* integer /*owned*/ = rawtype(pySelf,IFBasic,IFInteger,NULL,NULL,NULL,"integer");
+  PyObject* integer /*owned*/ = rawtype(pySelf,IF_Basic,IF_Integer,NULL,NULL,NULL,"integer");
   if (!integer) return -1;
   Py_DECREF(integer);
 
-  PyObject* null /*owned*/ = rawtype(pySelf,IFBasic,IFNull,NULL,NULL,NULL,"null");
+  PyObject* null /*owned*/ = rawtype(pySelf,IF_Basic,IF_Null,NULL,NULL,NULL,"null");
   if (!null) return -1;
   Py_DECREF(null);
 
-  PyObject* real /*owned*/ = rawtype(pySelf,IFBasic,IFReal,NULL,NULL,NULL,"real");
+  PyObject* real /*owned*/ = rawtype(pySelf,IF_Basic,IF_Real,NULL,NULL,NULL,"real");
   if (!real) return -1;
   Py_DECREF(real);
 
-  PyObject* wildbasic /*owned*/ = rawtype(pySelf,IFBasic,IFWildBasic,NULL,NULL,NULL,"wildbasic");
+  PyObject* wildbasic /*owned*/ = rawtype(pySelf,IF_Basic,IF_WildBasic,NULL,NULL,NULL,"wildbasic");
   if (!wildbasic) return -1;
   Py_DECREF(wildbasic);
 
-  PyObject* wild /*owned*/ = rawtype(pySelf,IFWild,0,NULL,NULL,NULL,"wild");
+  PyObject* wild /*owned*/ = rawtype(pySelf,IF_Wild,0,NULL,NULL,NULL,"wild");
   if (!wild) return -1;
   Py_DECREF(wild);
 
   for(int i=0;i<PyList_GET_SIZE(self->types);++i) {
     PyObject* p /*borrowed*/ = PyList_GET_ITEM(self->types,i);
-    pIF1_TypeObject* t /*borrowed*/ = reinterpret_cast<pIF1_TypeObject*>(p);
+    IF1_TypeObject* t /*borrowed*/ = reinterpret_cast<IF1_TypeObject*>(p);
     if (t->name) PyDict_SetItem(self->dict,t->name,p);
   }
   return 0;
 }
 
 void module_dealloc(PyObject* pySelf) {
-  pIF1_ModuleObject* self = reinterpret_cast<pIF1_ModuleObject*>(pySelf);
+  IF1_ModuleObject* self = reinterpret_cast<IF1_ModuleObject*>(pySelf);
   if (self->weak) PyObject_ClearWeakRefs(pySelf);
 
+  Py_XDECREF(self->dict);
   Py_XDECREF(self->types);
+  Py_XDECREF(self->pragmas);
+  Py_XDECREF(self->functions);
   Py_TYPE(pySelf)->tp_free(pySelf);
 }
 
@@ -566,7 +617,7 @@ PyObject* module_str(PyObject* pySelf) {
 }
 
 PyObject* module_if1(PyObject* pySelf,void*) {
-  pIF1_ModuleObject* self = reinterpret_cast<pIF1_ModuleObject*>(pySelf);
+  IF1_ModuleObject* self = reinterpret_cast<IF1_ModuleObject*>(pySelf);
   PyObject* result = PyList_New(0);
   if (!result) return NULL;
 
@@ -608,29 +659,29 @@ PyObject* module_if1(PyObject* pySelf,void*) {
   return result;
 }
 
-PyObject* module_addtype_array(pIF1_ModuleObject* self,PyObject* args, PyObject* name, PyObject* namelist) {
+PyObject* module_addtype_array(IF1_ModuleObject* self,PyObject* args, PyObject* name, PyObject* namelist) {
   long code;
   PyObject* base = NULL;
-  if (!PyArg_ParseTuple(args,"lO!",&code,&pIF1_TypeType,&base)) return NULL;
+  if (!PyArg_ParseTuple(args,"lO!",&code,&IF1_TypeType,&base)) return NULL;
   return rawtype(self,code,0,base,NULL,name);
 }
 
-PyObject* module_addtype_basic(pIF1_ModuleObject* self,PyObject* args, PyObject* name, PyObject* namelist) {
+PyObject* module_addtype_basic(IF1_ModuleObject* self,PyObject* args, PyObject* name, PyObject* namelist) {
   long code;
   long basic;
   if (!PyArg_ParseTuple(args,"ll",&code,&basic)) return NULL;
-  if (basic < 0 || basic > IFWildBasic) return PyErr_Format(PyExc_ValueError,"invalid basic code %ld",basic);
+  if (basic < 0 || basic > IF_WildBasic) return PyErr_Format(PyExc_ValueError,"invalid basic code %ld",basic);
   return rawtype(self,code,basic,NULL,NULL,name);
 }
 
 template<int IFXXX>
-PyObject* module_addtype_chain(pIF1_ModuleObject* self,PyObject* args, PyObject* name, PyObject* namelist, ssize_t first) {
+PyObject* module_addtype_chain(IF1_ModuleObject* self,PyObject* args, PyObject* name, PyObject* namelist, ssize_t first) {
   PyObject* last /*owned*/ = NULL;
   for(ssize_t i=PyTuple_GET_SIZE(args)-1; i>=first; --i) {
     PyObject* Tname = namelist?PyList_GetItem(namelist,i-first):NULL;
     PyErr_Clear();
     PyObject* T /*borrowed*/ = PyTuple_GET_ITEM(args,i);
-    if (!PyObject_IsInstance(T,reinterpret_cast<PyObject*>(&pIF1_TypeType))) {
+    if (!PyObject_IsInstance(T,reinterpret_cast<PyObject*>(&IF1_TypeType))) {
       Py_XDECREF(last);
       return PyErr_Format(PyExc_TypeError,"Argument %ld is not a type",(long)i+1);
     }
@@ -648,7 +699,7 @@ PyObject* module_addtype_chain(pIF1_ModuleObject* self,PyObject* args, PyObject*
 }
 
 template<int STRUCTURE,int CHAIN>
-PyObject* module_addtype_structure(pIF1_ModuleObject* self,PyObject* args, PyObject* name, PyObject* namelist) {
+PyObject* module_addtype_structure(IF1_ModuleObject* self,PyObject* args, PyObject* name, PyObject* namelist) {
   PyObject* chain = module_addtype_chain<CHAIN>(self,args,NULL,namelist,1);
   if (!chain) return NULL;
 
@@ -656,7 +707,7 @@ PyObject* module_addtype_structure(pIF1_ModuleObject* self,PyObject* args, PyObj
 }
 
 
-PyObject* module_addtype_function(pIF1_ModuleObject* self,PyObject* args, PyObject* name, PyObject* namelist) {
+PyObject* module_addtype_function(IF1_ModuleObject* self,PyObject* args, PyObject* name, PyObject* namelist) {
   // I want this to be of the form: (code,tupletype,tupletype), but I might get
   // ... (code,(T,T,T),(T,T)) or (code,None,(T,T)) or even (code,(T,T,T),T)
   // at least it all looks like (code, ins, outs)
@@ -666,26 +717,26 @@ PyObject* module_addtype_function(pIF1_ModuleObject* self,PyObject* args, PyObje
   if (!PyArg_ParseTuple(args,"lOO",&code,&ins,&outs)) return NULL;
 
   // Inputs may be a tupletype, a tuple of types, a normal type, or None
-  if (PyObject_IsInstance(ins,(PyObject*)&pIF1_TypeType)) {
-    pIF1_TypeObject* tins = reinterpret_cast<pIF1_TypeObject*>(ins);
-    if (tins->code == IFTuple) {
+  if (PyObject_IsInstance(ins,(PyObject*)&IF1_TypeType)) {
+    IF1_TypeObject* tins = reinterpret_cast<IF1_TypeObject*>(ins);
+    if (tins->code == IF_Tuple) {
       Py_INCREF(ins);
     } else {
       // Build a tuple to pass this in
       PyObject* tup = PyTuple_New(1);
       PyTuple_SET_ITEM(tup,0,ins);
       Py_INCREF(ins);
-      ins = module_addtype_chain<IFTuple>(self,tup,NULL,namelist,0);
+      ins = module_addtype_chain<IF_Tuple>(self,tup,NULL,namelist,0);
       if (!ins) return NULL;
       Py_DECREF(tup);
     }
   }
   else if (PyTuple_Check(ins)) {
-    // With a tuple, just construct the new IFTuple from those
+    // With a tuple, just construct the new IF_Tuple from those
     if (PyTuple_GET_SIZE(ins) == 0) {
       ins = NULL;
     } else {
-      ins = module_addtype_chain<IFTuple>(self,ins,NULL,namelist,0);
+      ins = module_addtype_chain<IF_Tuple>(self,ins,NULL,namelist,0);
       if (!ins) return NULL;
     }
   }
@@ -697,24 +748,24 @@ PyObject* module_addtype_function(pIF1_ModuleObject* self,PyObject* args, PyObje
   }
 
   // Outputs may be a tupletype, a tuple of types, a normal type, but not None
-  if (PyObject_IsInstance(outs,(PyObject*)&pIF1_TypeType)) {
-    pIF1_TypeObject* touts = reinterpret_cast<pIF1_TypeObject*>(outs);
-    if (touts->code == IFTuple) {
+  if (PyObject_IsInstance(outs,(PyObject*)&IF1_TypeType)) {
+    IF1_TypeObject* touts = reinterpret_cast<IF1_TypeObject*>(outs);
+    if (touts->code == IF_Tuple) {
       Py_INCREF(outs);
     } else {
       // Build a tuple to pass this in
       PyObject* tup = PyTuple_New(1);
       PyTuple_SET_ITEM(tup,0,outs);
       Py_INCREF(outs);
-      outs = module_addtype_chain<IFTuple>(self,tup,NULL,namelist,0);
+      outs = module_addtype_chain<IF_Tuple>(self,tup,NULL,namelist,0);
       if (!outs) return NULL;
       Py_DECREF(tup);
     }
   }
   else if (PyTuple_Check(outs)) {
-    // With a tuple, just construct the new IFTuple from those
+    // With a tuple, just construct the new IF_Tuple from those
     if (PyTuple_GET_SIZE(outs) == 0) return PyErr_Format(PyExc_ValueError,"Cannot have an empty output type");
-    outs = module_addtype_chain<IFTuple>(self,outs,NULL,namelist,0);
+    outs = module_addtype_chain<IF_Tuple>(self,outs,NULL,namelist,0);
     if (!outs) return NULL;
   }
   else {
@@ -722,14 +773,14 @@ PyObject* module_addtype_function(pIF1_ModuleObject* self,PyObject* args, PyObje
     return PyErr_Format(PyExc_TypeError,"function output cannot be %s",outs->ob_type->tp_name);
   }
 
-  PyObject* result = rawtype(self,IFFunction,0,ins,outs,name);
+  PyObject* result = rawtype(self,IF_Function,0,ins,outs,name);
   Py_XDECREF(ins);
   Py_XDECREF(outs);
   return result;
 }
 
 PyObject* module_addtype(PyObject* pySelf,PyObject* args,PyObject* kwargs) {
-  pIF1_ModuleObject* self = reinterpret_cast<pIF1_ModuleObject*>(pySelf);
+  IF1_ModuleObject* self = reinterpret_cast<IF1_ModuleObject*>(pySelf);
   PyObject* name /*borrowed*/ = NULL;
   PyObject* namelist /*owned*/ = NULL;
   if (kwargs) {
@@ -766,35 +817,35 @@ PyObject* module_addtype(PyObject* pySelf,PyObject* args,PyObject* kwargs) {
 
   PyObject* result = NULL;
   switch(code) {
-  case IFArray:
+  case IF_Array:
     result = module_addtype_array(self,args,name, namelist);
     break;
-  case IFBasic: 
+  case IF_Basic: 
     result = module_addtype_basic(self,args,name, namelist);
     break;
-  case IFField: 
-    result = module_addtype_chain<IFField>(self,args,name, namelist,1);
+  case IF_Field: 
+    result = module_addtype_chain<IF_Field>(self,args,name, namelist,1);
     break;
-  case IFFunction: 
+  case IF_Function: 
     result = module_addtype_function(self,args,name, namelist);
     break;
-  case IFMultiple: 
+  case IF_Multiple: 
     result = module_addtype_array(self,args,name, namelist);
     break;
-  case IFRecord: 
-    result = module_addtype_structure<IFRecord,IFField>(self,args,name, namelist);
+  case IF_Record: 
+    result = module_addtype_structure<IF_Record,IF_Field>(self,args,name, namelist);
     break;
-  case IFStream: 
+  case IF_Stream: 
     result = module_addtype_array(self,args,name, namelist);
     break;
-  case IFTag: 
-    result = module_addtype_chain<IFTag>(self,args,name, namelist,1);
+  case IF_Tag: 
+    result = module_addtype_chain<IF_Tag>(self,args,name, namelist,1);
     break;
-  case IFTuple: 
-    result = module_addtype_chain<IFTuple>(self,args,name, namelist,1);
+  case IF_Tuple: 
+    result = module_addtype_chain<IF_Tuple>(self,args,name, namelist,1);
     break;
-  case IFUnion: 
-    result = module_addtype_structure<IFUnion,IFTag>(self,args,name, namelist);
+  case IF_Union: 
+    result = module_addtype_structure<IF_Union,IF_Tag>(self,args,name, namelist);
     break;
   default:
     result = PyErr_Format(PyExc_ValueError,"Unknown type code %ld",code);
@@ -804,8 +855,27 @@ PyObject* module_addtype(PyObject* pySelf,PyObject* args,PyObject* kwargs) {
   return result;
 }
 
+PyObject* module_addfunction(PyObject* pySelf,PyObject* args) {
+  IF1_ModuleObject* self = reinterpret_cast<IF1_ModuleObject*>(pySelf);
+
+  PyObject* name;
+  long opcode = IFXGraph;
+  if (!PyArg_ParseTuple(args,"O!|l",&PyString_Type,&name,&opcode)) return NULL;
+
+  PyObject* N /*owned*/ = PyType_GenericNew(&IF1_NodeType,NULL,NULL);
+  if (!N) return NULL;
+  IF1_NodeObject* G = reinterpret_cast<IF1_NodeObject*>(N);
+
+  G->name = name;
+
+  PyList_Append(self->functions,N);
+
+  return N;
+}
+
 static PyMethodDef module_methods[] = {
   {(char*)"addtype",(PyCFunction)module_addtype,METH_VARARGS|METH_KEYWORDS,(char*)"adds a new type"},
+  {(char*)"addfunction",module_addfunction,METH_VARARGS,(char*)"create a new function graph"},
   {NULL}  /* Sentinel */
 };
 
@@ -814,7 +884,11 @@ static PyGetSetDef module_getset[] = {
   {NULL}
 };
 
-static PyMethodDef pIF1_methods[] = {
+static PyObject* node_inport(PyObject* pySelf, PyObject* args, PyObject* kwargs) {
+  return PyInt_FromLong(12345);
+}
+
+static PyMethodDef IF1_methods[] = {
     {NULL}  /* Sentinel */
 };
 
@@ -824,57 +898,151 @@ static PyMethodDef pIF1_methods[] = {
 PyMODINIT_FUNC
 initif1(void) 
 {
-    PyObject* m;
+  PyObject* m;
 
-    pIF1_ModuleType.tp_new = PyType_GenericNew;
-    pIF1_ModuleType.tp_init = module_init;
-    pIF1_ModuleType.tp_dealloc = module_dealloc;
-    pIF1_ModuleType.tp_methods = module_methods;
-    pIF1_ModuleType.tp_str = module_str;
-    pIF1_ModuleType.tp_repr = module_str;
-    pIF1_ModuleType.tp_members = module_members;
-    pIF1_ModuleType.tp_getset = module_getset;
-    pIF1_ModuleType.tp_getattro = PyObject_GenericGetAttr;
-    pIF1_ModuleType.tp_dictoffset = offsetof(pIF1_ModuleObject,dict);
-    if (PyType_Ready(&pIF1_ModuleType) < 0)
-        return;
+  IF1_ModuleType.tp_new = PyType_GenericNew;
+  IF1_ModuleType.tp_init = module_init;
+  IF1_ModuleType.tp_dealloc = module_dealloc;
+  IF1_ModuleType.tp_methods = module_methods;
+  IF1_ModuleType.tp_str = module_str;
+  IF1_ModuleType.tp_repr = module_str;
+  IF1_ModuleType.tp_members = module_members;
+  IF1_ModuleType.tp_getset = module_getset;
+  IF1_ModuleType.tp_getattro = PyObject_GenericGetAttr;
+  IF1_ModuleType.tp_dictoffset = offsetof(IF1_ModuleObject,dict);
+  if (PyType_Ready(&IF1_ModuleType) < 0)
+    return;
 
-    pIF1_TypeType.tp_dealloc = type_dealloc;
-    pIF1_TypeType.tp_str = type_str;
-    pIF1_TypeType.tp_repr = type_str;
-    pIF1_TypeType.tp_members = type_members;
-    pIF1_TypeType.tp_getset = type_getset;
-    pIF1_TypeType.tp_as_number = &type_number;
-    type_number.nb_int = type_int;
-    if (PyType_Ready(&pIF1_TypeType) < 0)
-        return;
+  IF1_TypeType.tp_dealloc = type_dealloc;
+  IF1_TypeType.tp_str = type_str;
+  IF1_TypeType.tp_repr = type_str;
+  IF1_TypeType.tp_members = type_members;
+  IF1_TypeType.tp_getset = type_getset;
+  IF1_TypeType.tp_as_number = &type_number;
+  type_number.nb_int = type_int;
+  if (PyType_Ready(&IF1_TypeType) < 0) return;
 
-    m = Py_InitModule3("pIF1", pIF1_methods,
-                       "Example module that creates an extension type.");
+  IF1_NodeType.tp_call = node_inport;
+  if (PyType_Ready(&IF1_NodeType) < 0) return;
 
-    Py_INCREF(&pIF1_ModuleType);
-    PyModule_AddObject(m, "Module", (PyObject *)&pIF1_ModuleType);
-    Py_INCREF(&pIF1_TypeType);
-    PyModule_AddObject(m, "Type", (PyObject *)&pIF1_TypeType);
+  m = Py_InitModule3("sap.if1", IF1_methods,
+		     "Example module that creates an extension type.");
 
-    PyModule_AddIntMacro(m,IFArray);
-    PyModule_AddIntMacro(m,IFBasic);
-    PyModule_AddIntMacro(m,IFField);
-    PyModule_AddIntMacro(m,IFFunction);
-    PyModule_AddIntMacro(m,IFMultiple);
-    PyModule_AddIntMacro(m,IFRecord);
-    PyModule_AddIntMacro(m,IFStream);
-    PyModule_AddIntMacro(m,IFTag);
-    PyModule_AddIntMacro(m,IFTuple);
-    PyModule_AddIntMacro(m,IFUnion);
-    PyModule_AddIntMacro(m,IFWild);
+  Py_INCREF(&IF1_ModuleType);
+  PyModule_AddObject(m, "Module", (PyObject *)&IF1_ModuleType);
+  Py_INCREF(&IF1_TypeType);
+  PyModule_AddObject(m, "Type", (PyObject *)&IF1_TypeType);
 
-    PyModule_AddIntMacro(m,IFBoolean);
-    PyModule_AddIntMacro(m,IFCharacter);
-    PyModule_AddIntMacro(m,IFDoubleReal);
-    PyModule_AddIntMacro(m,IFInteger);
-    PyModule_AddIntMacro(m,IFNull);
-    PyModule_AddIntMacro(m,IFReal);
-    PyModule_AddIntMacro(m,IFWildBasic);
+  PyModule_AddIntMacro(m,IF_Array);
+  PyModule_AddIntMacro(m,IF_Basic);
+  PyModule_AddIntMacro(m,IF_Field);
+  PyModule_AddIntMacro(m,IF_Function);
+  PyModule_AddIntMacro(m,IF_Multiple);
+  PyModule_AddIntMacro(m,IF_Record);
+  PyModule_AddIntMacro(m,IF_Stream);
+  PyModule_AddIntMacro(m,IF_Tag);
+  PyModule_AddIntMacro(m,IF_Tuple);
+  PyModule_AddIntMacro(m,IF_Union);
+  PyModule_AddIntMacro(m,IF_Wild);
+  PyModule_AddIntMacro(m,IF_Boolean);
+  PyModule_AddIntMacro(m,IF_Character);
+  PyModule_AddIntMacro(m,IF_DoubleReal);
+  PyModule_AddIntMacro(m,IF_Integer);
+  PyModule_AddIntMacro(m,IF_Null);
+  PyModule_AddIntMacro(m,IF_Real);
+  PyModule_AddIntMacro(m,IF_WildBasic);
+  PyModule_AddIntMacro(m,IFAAddH);
+  PyModule_AddIntMacro(m,IFAAddL);
+  PyModule_AddIntMacro(m,IFAAdjust);
+  PyModule_AddIntMacro(m,IFABuild);
+  PyModule_AddIntMacro(m,IFACatenate);
+  PyModule_AddIntMacro(m,IFAElement);
+  PyModule_AddIntMacro(m,IFAFill);
+  PyModule_AddIntMacro(m,IFAGather);
+  PyModule_AddIntMacro(m,IFAIsEmpty);
+  PyModule_AddIntMacro(m,IFALimH);
+  PyModule_AddIntMacro(m,IFALimL);
+  PyModule_AddIntMacro(m,IFARemH);
+  PyModule_AddIntMacro(m,IFARemL);
+  PyModule_AddIntMacro(m,IFAReplace);
+  PyModule_AddIntMacro(m,IFAScatter);
+  PyModule_AddIntMacro(m,IFASetL);
+  PyModule_AddIntMacro(m,IFASize);
+  PyModule_AddIntMacro(m,IFAbs);
+  PyModule_AddIntMacro(m,IFBindArguments);
+  PyModule_AddIntMacro(m,IFBool);
+  PyModule_AddIntMacro(m,IFCall);
+  PyModule_AddIntMacro(m,IFChar);
+  PyModule_AddIntMacro(m,IFDiv);
+  PyModule_AddIntMacro(m,IFDouble);
+  PyModule_AddIntMacro(m,IFEqual);
+  PyModule_AddIntMacro(m,IFExp);
+  PyModule_AddIntMacro(m,IFFirstValue);
+  PyModule_AddIntMacro(m,IFFinalValue);
+  PyModule_AddIntMacro(m,IFFloor);
+  PyModule_AddIntMacro(m,IFInt);
+  PyModule_AddIntMacro(m,IFIsError);
+  PyModule_AddIntMacro(m,IFLess);
+  PyModule_AddIntMacro(m,IFLessEqual);
+  PyModule_AddIntMacro(m,IFMax);
+  PyModule_AddIntMacro(m,IFMin);
+  PyModule_AddIntMacro(m,IFMinus);
+  PyModule_AddIntMacro(m,IFMod);
+  PyModule_AddIntMacro(m,IFNeg);
+  PyModule_AddIntMacro(m,IFNoOp);
+  PyModule_AddIntMacro(m,IFNot);
+  PyModule_AddIntMacro(m,IFNotEqual);
+  PyModule_AddIntMacro(m,IFPlus);
+  PyModule_AddIntMacro(m,IFRangeGenerate);
+  PyModule_AddIntMacro(m,IFRBuild);
+  PyModule_AddIntMacro(m,IFRElements);
+  PyModule_AddIntMacro(m,IFRReplace);
+  PyModule_AddIntMacro(m,IFRedLeft);
+  PyModule_AddIntMacro(m,IFRedRight);
+  PyModule_AddIntMacro(m,IFRedTree);
+  PyModule_AddIntMacro(m,IFReduce);
+  PyModule_AddIntMacro(m,IFRestValues);
+  PyModule_AddIntMacro(m,IFSingle);
+  PyModule_AddIntMacro(m,IFTimes);
+  PyModule_AddIntMacro(m,IFTrunc);
+  PyModule_AddIntMacro(m,IFPrefixSize);
+  PyModule_AddIntMacro(m,IFError);
+  PyModule_AddIntMacro(m,IFReplaceMulti);
+  PyModule_AddIntMacro(m,IFConvert);
+  PyModule_AddIntMacro(m,IFCallForeign);
+  PyModule_AddIntMacro(m,IFAElementN);
+  PyModule_AddIntMacro(m,IFAElementP);
+  PyModule_AddIntMacro(m,IFAElementM);
+  PyModule_AddIntMacro(m,IFSGraph);
+  PyModule_AddIntMacro(m,IFLGraph);
+  PyModule_AddIntMacro(m,IFIGraph);
+  PyModule_AddIntMacro(m,IFXGraph);
+  PyModule_AddIntMacro(m,IFLPGraph);
+  PyModule_AddIntMacro(m,IFRLGraph);
+
+  PyObject* dict /*borrowed*/ = PyModule_GetDict(m);
+  if (!dict) return;
+
+  PyObject* opnames = PyDict_New();
+  PyModule_AddObject(m,"opnames",opnames);
+  PyObject* opcodes = PyDict_New();
+  PyModule_AddObject(m,"opcodes",opcodes);
+  PyObject* key;
+  PyObject* value;
+  Py_ssize_t pos = 0;
+  while(PyDict_Next(dict,&pos,&key,&value)) {
+    if (PyString_Check(key) &&
+	PyString_AS_STRING(key)[0] == 'I' && PyString_AS_STRING(key)[1] == 'F' &&
+	PyString_AS_STRING(key)[2] != '_'
+	) {
+      PyDict_SetItem(opnames,key,value);
+      PyDict_SetItem(opcodes,value,key);
+    }
+  }
+
+  
 
 }
+//(insert "\n" (shell-command-to-string "awk '/ IF/{printf \"PyModule_AddIntMacro(m,%s);\\n\", $1}' IFX.h"))
+
+

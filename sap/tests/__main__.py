@@ -1,5 +1,5 @@
 """
->>> from sap.if1 import Module,IFBasic,IFArray,IFStream,IFMultiple,IFTuple,IFFunction
+>>> from sap.if1 import Module,IF_Basic,IF_Array,IF_Stream,IF_Multiple,IF_Tuple,IF_Function
 >>> m = Module()
 >>> m
 <module>
@@ -11,7 +11,7 @@
 boolean
 >>> m.integer
 integer
->>> r = m.addtype(IFBasic,3) # doesn't make a new type!
+>>> r = m.addtype(IF_Basic,3) # doesn't make a new type!
 >>> r is m.integer
 True
 >>> m.pragmas['C'] = 'IF1 Check'
@@ -19,23 +19,23 @@ True
 >>> m.pragmas['F'] = 'Python Frontend'
 >>> m.types
 [boolean, character, doublereal, integer, null, real, wildbasic, wild]
->>> m.addtype(IFArray,m.integer)
+>>> m.addtype(IF_Array,m.integer)
 array[integer]
->>> m.addtype(IFStream,m.real)
+>>> m.addtype(IF_Stream,m.real)
 stream[real]
->>> m.addtype(IFMultiple,m.boolean)
+>>> m.addtype(IF_Multiple,m.boolean)
 multiple[boolean]
->>> ins = m.addtype(IFTuple,m.integer,m.integer)
->>> outs = m.addtype(IFTuple,m.real)
->>> m.addtype(IFFunction,ins,outs)
+>>> ins = m.addtype(IF_Tuple,m.integer,m.integer)
+>>> outs = m.addtype(IF_Tuple,m.real)
+>>> m.addtype(IF_Function,ins,outs)
 (integer,integer)->(real)
->>> m.addtype(IFFunction,(m.boolean,m.real),(m.real,m.real))
+>>> m.addtype(IF_Function,(m.boolean,m.real),(m.real,m.real))
 (boolean,real)->(real,real)
->>> m.addtype(IFFunction,m.integer,m.real)
+>>> m.addtype(IF_Function,m.integer,m.real)
 (integer)->(real)
->>> m.addtype(IFFunction,None,m.real)
+>>> m.addtype(IF_Function,None,m.real)
 ->(real)
->>> m.addtype(IFFunction,(),m.real)
+>>> m.addtype(IF_Function,(),m.real)
 ->(real)
 >>> for x in m.if1: print x
 T 1 1 0 %na=boolean
@@ -66,15 +66,20 @@ C$  F Python Frontend
 import sap.if1
 
 if __name__ == '__main__':
-    print sap.if1
+    print sap.if1.opcodes
+
+    m = sap.if1.Module()
+    g = m.addfunction("main")
+    
+    print g(1)
 
     import doctest
     doctest.testmod()
 
 if 0:
-    print 'function',m.addtype(IFFunction,ins,outs)
-    print 'function',m.addtype(IFFunction,None,outs)
-    print 'function',m.addtype(IFFunction,(m.integer,m.integer),(m.boolean,))
-    print 'function',m.addtype(IFFunction,(),(m.boolean,))
-    print 'function',m.addtype(IFFunction,m.integer,m.boolean)
+    print 'function',m.addtype(IF_Function,ins,outs)
+    print 'function',m.addtype(IF_Function,None,outs)
+    print 'function',m.addtype(IF_Function,(m.integer,m.integer),(m.boolean,))
+    print 'function',m.addtype(IF_Function,(),(m.boolean,))
+    print 'function',m.addtype(IF_Function,m.integer,m.boolean)
     
