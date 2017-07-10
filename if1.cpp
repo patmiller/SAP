@@ -4,6 +4,46 @@
 
 typedef struct {
   PyObject_HEAD
+
+  PyObject* weaknode;
+  PyObject* weaksrc;
+  ssize_t port;
+
+  PyObject* literal;
+  PyObject* literaltype;
+} IF1_InPortObject;
+
+const char* IF1_inport_doc = "TBD: input port";
+static PyTypeObject IF1_InPortType = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    "IF1.InPort",             /* tp_name */
+    sizeof(IF1_InPortObject), /* tp_basicsize */
+    0,                         /* tp_itemsize */
+    0,                         /* tp_dealloc */
+    0,                         /* tp_print */
+    0,                         /* tp_getattr */
+    0,                         /* tp_setattr */
+    0,                         /* tp_compare */
+    0,                         /* tp_repr */
+    0,                         /* tp_as_number */
+    0,                         /* tp_as_sequence */
+    0,                         /* tp_as_mapping */
+    0,                         /* tp_hash */
+    0,                         /* tp_call */
+    0,                         /* tp_str */
+    0,                         /* tp_getattro */
+    0,                         /* tp_setattro */
+    0,                         /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT,        /* tp_flags */
+    IF1_inport_doc,             /* tp_doc */
+    0,                       // tp_traverse
+    0,                       // tp_clear
+    0,                       // tp_richcompare
+    0, // tp_weaklistoffset
+};
+
+typedef struct {
+  PyObject_HEAD
   PyObject* module; // Weak link to module
   PyObject* parent;
   long opcode;
@@ -14,6 +54,12 @@ typedef struct {
   // Weak reference support
   PyObject* weak;
 } IF1_NodeObject;
+
+static PyMemberDef node_members[] = {
+  {(char*)"opcode",T_LONG,offsetof(IF1_NodeObject,opcode),0,(char*)"op code: IFPlus, IFMinus, ..."},
+  {(char*)"name",T_OBJECT,offsetof(IF1_NodeObject,name),0,(char*)"Function graph name (None for others)"},
+  {NULL}
+};
 
 const char* IF1_node_doc = "TBD: node";
 
@@ -885,7 +931,8 @@ static PyGetSetDef module_getset[] = {
 };
 
 static PyObject* node_inport(PyObject* pySelf, PyObject* args, PyObject* kwargs) {
-  return PyInt_FromLong(12345);
+  PyObject* p = PyType_GenericNew(&IF1_InPortType,NULL,NULL);
+  return p;
 }
 
 static PyMethodDef IF1_methods[] = {
@@ -899,6 +946,8 @@ PyMODINIT_FUNC
 initif1(void) 
 {
   PyObject* m;
+
+  if (PyType_Ready(&IF1_InPortType) < 0) return;
 
   IF1_ModuleType.tp_new = PyType_GenericNew;
   IF1_ModuleType.tp_init = module_init;
@@ -922,6 +971,7 @@ initif1(void)
   type_number.nb_int = type_int;
   if (PyType_Ready(&IF1_TypeType) < 0) return;
 
+  IF1_NodeType.tp_members = node_members;
   IF1_NodeType.tp_call = node_inport;
   if (PyType_Ready(&IF1_NodeType) < 0) return;
 
@@ -1023,6 +1073,7 @@ initif1(void)
   PyObject* dict /*borrowed*/ = PyModule_GetDict(m);
   if (!dict) return;
 
+  // We want opcode->name and name->opcode maps
   PyObject* opnames = PyDict_New();
   PyModule_AddObject(m,"opnames",opnames);
   PyObject* opcodes = PyDict_New();

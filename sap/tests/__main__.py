@@ -67,10 +67,13 @@ import sap.if1
 
 if __name__ == '__main__':
     print sap.if1.opcodes
+    print sap.if1.opnames
 
     m = sap.if1.Module()
     g = m.addfunction("main")
     
+    print g.opcode
+    print g.name
     print g(1)
 
     import doctest
