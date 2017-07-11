@@ -2,6 +2,15 @@
 #include "structmember.h"
 #include "IFX.h"
 
+PyObject* OPNAMES = NULL;
+PyObject* OPCODES = NULL;
+
+PyObject* ARROW = NULL; // ->
+PyObject* COLON = NULL; // :
+PyObject* COMMA = NULL; // ,
+PyObject* LPAREN = NULL; // (
+PyObject* RPAREN = NULL; // )
+
 // ----------------------------------------------------------------------
 // InPort
 // ----------------------------------------------------------------------
@@ -12,13 +21,12 @@ static PyTypeObject IF1_InPortType;
 typedef struct {
   PyObject_HEAD
 
-  PyObject* weaknode;
   PyObject* weaksrc;
   ssize_t port;
 
-  PyObject* literal;
-  PyObject* literaltype;
 } IF1_InPortObject;
+
+static PyNumberMethods inport_number;
 
 // ----------------------------------------------------------------------
 // Node
@@ -55,13 +63,15 @@ static PyTypeObject IF1_GraphType;
 typedef struct {
   IF1_NodeObject node;
 
-  // Optional name (function graphs)
+  // Optional name & type (function graphs)
   PyObject* name;
+  PyObject* type;
 
 } IF1_GraphObject;
 
 static PyMemberDef graph_members[] = {
   {(char*)"name",T_OBJECT,offsetof(IF1_GraphObject,name),0,(char*)"Optional graph name"},
+  {(char*)"type",T_OBJECT,offsetof(IF1_GraphObject,type),0,(char*)"Optional graph type"},
   {NULL}
 };
 
@@ -134,20 +144,39 @@ static PyMemberDef module_members[] = {
   ###   #  #  #      ##   #       ##  
 */
 
-static PyObject* node_inport(PyObject* pySelf, PyObject* args, PyObject* kwargs) {
-  PyObject* p = PyType_GenericNew(&IF1_InPortType,NULL,NULL);
-  return p;
-}
-
 void inport_dealloc(PyObject* pySelf) {
   IF1_InPortObject* self = reinterpret_cast<IF1_InPortObject*>(pySelf);
 
-  Py_XDECREF(self->weaknode);
   Py_XDECREF(self->weaksrc);
-  Py_XDECREF(self->literal);
-  Py_XDECREF(self->literaltype);
 
   Py_TYPE(pySelf)->tp_free(pySelf);
+}
+
+PyObject* inport_str(PyObject* pySelf) {
+  IF1_InPortObject* self = reinterpret_cast<IF1_InPortObject*>(pySelf);
+
+  PyObject* sport /*owned*/ = PyString_FromFormat("%ld",self->port);
+  if (!sport) return NULL;
+
+  PyString_Concat(&sport,COLON);
+  if (!sport) return NULL;
+
+  PyObject* src /*borrowed*/ = PyWeakref_GET_OBJECT(self->weaksrc);
+  if (src == Py_None) { Py_DECREF(sport); return PyErr_Format(PyExc_ValueError,"in port is disconnected"); }
+  PyObject* str /*owned*/ = PyObject_Str(src);
+  if (!str) { Py_DECREF(sport); return NULL; }
+  
+  PyString_ConcatAndDel(&sport,str);
+  return sport;
+}
+
+PyObject* inport_lshift(PyObject* pySelf, PyObject* other) {
+  // Do we get a literal?
+  if (PyString_Check(other)) {
+    return PyString_FromString("literal");
+  }
+
+  return PyErr_Format(PyExc_NotImplementedError,"lshift for oports");
 }
 
 /*
@@ -169,6 +198,32 @@ void node_dealloc(PyObject* pySelf) {
   Py_TYPE(pySelf)->tp_free(pySelf);
 }
 
+PyObject* node_str(PyObject* pySelf) {
+  IF1_NodeObject* self = reinterpret_cast<IF1_NodeObject*>(pySelf);
+
+  PyObject* pyOpcode /*owned*/ = PyLong_FromLong(self->opcode);
+  if (not pyOpcode) return NULL;
+
+  PyObject* gstr /*owned*/ = PyDict_GetItem(OPCODES,pyOpcode);
+  Py_DECREF(pyOpcode);
+  if (!gstr) {
+    return PyString_FromFormat("<opcode %ld>",self->opcode);
+  }
+  return gstr;
+}
+
+static PyObject* node_inport(PyObject* pySelf, PyObject* args, PyObject* kwargs) {
+  PyObject* p /*owned*/ = PyType_GenericNew(&IF1_InPortType,NULL,NULL);
+  IF1_InPortObject* port = reinterpret_cast<IF1_InPortObject*>(p);
+
+  if (!PyArg_ParseTuple(args,"l",&port->port)) return NULL;
+  if (port->port <= 0) return PyErr_Format(PyExc_ValueError,"port must be > 0 (%ld)",port->port);
+
+  port->weaksrc = PyWeakref_NewRef(pySelf,0);
+  if (!port->weaksrc) { Py_DECREF(p); return NULL; }
+  return p;
+}
+
 /*
    ##                     #     
   #  #                    #     
@@ -185,6 +240,7 @@ void graph_dealloc(PyObject* pySelf) {
   Py_XDECREF(self->name);
   node_dealloc(pySelf);
 }
+
 
 /*
   ###                     
@@ -233,35 +289,6 @@ PyObject* type_str(PyObject* pySelf) {
   IF1_TypeObject* self = reinterpret_cast<IF1_TypeObject*>(pySelf);
 
   static const char* flavor[] = {"array","basic","field","function","multiple","record","stream","tag","tuple","union"};
-  static PyObject* arrow = NULL;
-  if (!arrow) {
-    arrow = PyString_InternFromString("->");
-    if (!arrow) return NULL;
-  }
-
-  static PyObject* colon = NULL;
-  if (!colon) {
-    colon = PyString_InternFromString(":");
-    if (!colon) return NULL;
-  }
-
-  static PyObject* comma = NULL;
-  if (!comma) {
-    comma = PyString_InternFromString(",");
-    if (!comma) return NULL;
-  }
-
-  PyObject* lparen = NULL;
-  if (!lparen) {
-    lparen = PyString_InternFromString("(");
-    if (!lparen) return NULL;
-  }
-
-  PyObject* rparen = NULL;
-  if (!rparen) {
-    rparen = PyString_InternFromString(")");
-    if (!rparen) return NULL;
-  }
 
   // If we named the type, just use the name (unless it is a tuple, field, or tag)
   if (self->name && self->code != IF_Tuple && self->code != IF_Field && self->code != IF_Tag) {
@@ -299,17 +326,17 @@ PyObject* type_str(PyObject* pySelf) {
   case IF_Tuple: {
     PyObject* result = PyString_FromString("");
     if (!result) return NULL;
-    PyString_Concat(&result,lparen);
+    PyString_Concat(&result,LPAREN);
     if (!result) return NULL;
 
     for(;self;) {
       if (self->name) {
-	PyObject* fname = PyObject_Str(self->name);
-	if (!fname) { Py_DECREF(result); return NULL; }
-	PyString_ConcatAndDel(&result,fname);
-	if (!result) return NULL;
-	PyString_Concat(&result,colon);
-	if (!result) return NULL;
+        PyObject* fname = PyObject_Str(self->name);
+        if (!fname) { Py_DECREF(result); return NULL; }
+        PyString_ConcatAndDel(&result,fname);
+        if (!result) return NULL;
+        PyString_Concat(&result,COLON);
+        if (!result) return NULL;
       }
 
       PyObject* elementtype = PyWeakref_GET_OBJECT(self->weak1);
@@ -324,10 +351,10 @@ PyObject* type_str(PyObject* pySelf) {
       PyObject* next = self->weak2?PyWeakref_GET_OBJECT(self->weak2):NULL;
       if (next == Py_None) return PyErr_Format(PyExc_RuntimeError,"disconnected tuple element link");
       self = reinterpret_cast<IF1_TypeObject*>(next);
-      if (self) PyString_Concat(&result,comma);
+      if (self) PyString_Concat(&result,COMMA);
       if (!result) return NULL;
     }
-    PyString_Concat(&result,rparen);
+    PyString_Concat(&result,RPAREN);
     return result;
   }
   case IF_Function: {
@@ -342,7 +369,7 @@ PyObject* type_str(PyObject* pySelf) {
     PyObject* outs /*owned*/ = PyObject_Str(outtype);
     if (!outs) { Py_DECREF(ins); return NULL; }
 
-    PyString_Concat(&ins,arrow);
+    PyString_Concat(&ins,ARROW);
     PyString_ConcatAndDel(&ins,outs);
     return ins;
   }
@@ -558,12 +585,12 @@ static PyObject* rawtype(IF1_ModuleObject* module,
                          PyObject* sub2,
                          PyObject* name) {
   return rawtype(reinterpret_cast<PyObject*>(module),
-		 code,
-		 aux,
-		 sub1,
-		 sub2,
-		 name,
-		 NULL);
+                 code,
+                 aux,
+                 sub1,
+                 sub2,
+                 name,
+                 NULL);
 }
 
 int module_init(PyObject* pySelf, PyObject* args, PyObject* kwargs) {
@@ -818,14 +845,14 @@ PyObject* module_addtype(PyObject* pySelf,PyObject* args,PyObject* kwargs) {
       namelist = PyList_New(0);
       if (!namelist) { Py_DECREF(namesiter); return NULL; }
       while((PyErr_Clear(), item=PyIter_Next(namesiter))) {
-	int a = PyList_Append(namelist,item);
-	Py_DECREF(item);
-	if(a<0) {
-	  Py_DECREF(namesiter);
-	  Py_DECREF(namelist);
-	  return NULL;
-	}
-	Py_DECREF(item);
+        int a = PyList_Append(namelist,item);
+        Py_DECREF(item);
+        if(a<0) {
+          Py_DECREF(namesiter);
+          Py_DECREF(namelist);
+          return NULL;
+        }
+        Py_DECREF(item);
       }
       Py_DECREF(namesiter);
     }
@@ -882,13 +909,21 @@ PyObject* module_addfunction(PyObject* pySelf,PyObject* args) {
 
   PyObject* name;
   long opcode = IFXGraph;
-  if (!PyArg_ParseTuple(args,"O!|l",&PyString_Type,&name,&opcode)) return NULL;
+  PyObject* type = NULL;
+  if (!PyArg_ParseTuple(args,"O!|lO!",&PyString_Type,&name,&opcode,&IF1_TypeType,&type)) return NULL;
 
   PyObject* N /*owned*/ = PyType_GenericNew(&IF1_GraphType,NULL,NULL);
   if (!N) return NULL;
   IF1_GraphObject* G = reinterpret_cast<IF1_GraphObject*>(N);
+  
+  G->node.module = PyWeakref_NewRef(pySelf,0);
+  if ( !G->node.module ) return NULL;
+  G->node.parent = NULL; // Top level graph
+  G->node.opcode = opcode;
+  G->node.children = PyList_New(0);
 
   Py_INCREF(G->name = name);
+  Py_XINCREF(G->type = type);
 
   PyList_Append(self->functions,N);
 
@@ -925,13 +960,26 @@ static PyMethodDef IF1_methods[] = {
 PyMODINIT_FUNC
 initif1(void) 
 {
-  PyObject* m;
+  ARROW = PyString_InternFromString("->");
+  if (!ARROW) return;
+
+  COLON = PyString_InternFromString(":");
+  if (!COLON) return;
+
+  COMMA = PyString_InternFromString(",");
+  if (!COMMA) return;
+
+  LPAREN = PyString_InternFromString("(");
+  if (!LPAREN) return;
+
+  RPAREN = PyString_InternFromString(")");
+  if (!RPAREN) return;
 
   // ----------------------------------------------------------------------
   // Setup
   // ----------------------------------------------------------------------
-  m = Py_InitModule3("sap.if1", IF1_methods,
-		     "Example module that creates an extension type.");
+  PyObject* m = Py_InitModule3("sap.if1", IF1_methods,
+                     "Example module that creates an extension type.");
   if (!m) return;
 
   // ----------------------------------------------------------------------
@@ -939,9 +987,13 @@ initif1(void)
   // ----------------------------------------------------------------------
   IF1_InPortType.tp_name = "if1.InPort";
   IF1_InPortType.tp_basicsize = sizeof(IF1_InPortObject);
-  IF1_InPortType.tp_flags = Py_TPFLAGS_DEFAULT;
+  IF1_InPortType.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_CHECKTYPES;
   IF1_InPortType.tp_doc = inport_doc;
   IF1_InPortType.tp_dealloc = inport_dealloc;
+  IF1_InPortType.tp_str = inport_str;
+  IF1_InPortType.tp_repr = inport_str;
+  IF1_InPortType.tp_as_number = &inport_number;
+  inport_number.nb_lshift = inport_lshift;
   if (PyType_Ready(&IF1_InPortType) < 0) return;
 
   // ----------------------------------------------------------------------
@@ -954,6 +1006,9 @@ initif1(void)
   IF1_NodeType.tp_dealloc = node_dealloc;
   IF1_NodeType.tp_members = node_members;
   IF1_NodeType.tp_call = node_inport;
+  IF1_NodeType.tp_str = node_str;
+  IF1_NodeType.tp_repr = node_str;
+  IF1_NodeType.tp_weaklistoffset = offsetof(IF1_NodeObject,weak);
   if (PyType_Ready(&IF1_NodeType) < 0) return;
 
   // ----------------------------------------------------------------------
@@ -1099,24 +1154,24 @@ initif1(void)
   PyModule_AddIntMacro(m,IFLPGraph);
   PyModule_AddIntMacro(m,IFRLGraph);
 
-  PyObject* dict /*borrowed*/ = PyModule_GetDict(m);
-  if (!dict) return;
 
   // We want opcode->name and name->opcode maps
-  PyObject* opnames = PyDict_New();
-  PyModule_AddObject(m,"opnames",opnames);
-  PyObject* opcodes = PyDict_New();
-  PyModule_AddObject(m,"opcodes",opcodes);
+  OPNAMES = PyDict_New();
+  PyModule_AddObject(m,"OPNAMES",OPNAMES);
+  OPCODES = PyDict_New();
+  PyModule_AddObject(m,"OPCODES",OPCODES);
   PyObject* key;
   PyObject* value;
   Py_ssize_t pos = 0;
+  PyObject* dict /*borrowed*/ = PyModule_GetDict(m);
+  if (!dict) return;
   while(PyDict_Next(dict,&pos,&key,&value)) {
     if (PyString_Check(key) &&
-	PyString_AS_STRING(key)[0] == 'I' && PyString_AS_STRING(key)[1] == 'F' &&
-	PyString_AS_STRING(key)[2] != '_'
-	) {
-      PyDict_SetItem(opnames,key,value);
-      PyDict_SetItem(opcodes,value,key);
+        PyString_AS_STRING(key)[0] == 'I' && PyString_AS_STRING(key)[1] == 'F' &&
+        PyString_AS_STRING(key)[2] != '_'
+        ) {
+      PyDict_SetItem(OPNAMES,key,value);
+      PyDict_SetItem(OPCODES,value,key);
     }
   }
 
@@ -1124,5 +1179,3 @@ initif1(void)
 
 }
 //(insert "\n" (shell-command-to-string "awk '/ IF/{printf \"PyModule_AddIntMacro(m,%s);\\n\", $1}' IFX.h"))
-
-

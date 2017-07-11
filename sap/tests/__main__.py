@@ -63,36 +63,20 @@ C$  D Dataflow ordered
 C$  F Python Frontend
 """
 
-print "IMP"
 import sap.if1
-print "IMP"
 
 if __name__ == '__main__':
-    print 'HERE'
-    print sap.if1.opcodes
-    print 'HERE'
-    print sap.if1.opnames
-    print 'HERE'
-
     m = sap.if1.Module()
-    print 'HERE'
     g = m.addfunction("main")
-    print 'HERE'
     
-    print g.opcode
-    print 'HERE'
     print g.name
-    print 'HERE'
-    print g(1)
-    print 'HERE'
+    print g.opcode
+    print g.type
+    print g
+    print g(1),g(3)
+
+    print g(1) << "3"
 
     import doctest
     doctest.testmod()
-
-if 0:
-    print 'function',m.addtype(IF_Function,ins,outs)
-    print 'function',m.addtype(IF_Function,None,outs)
-    print 'function',m.addtype(IF_Function,(m.integer,m.integer),(m.boolean,))
-    print 'function',m.addtype(IF_Function,(),(m.boolean,))
-    print 'function',m.addtype(IF_Function,m.integer,m.boolean)
     
