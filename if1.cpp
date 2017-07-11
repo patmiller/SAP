@@ -2,6 +2,13 @@
 #include "structmember.h"
 #include "IFX.h"
 
+// ----------------------------------------------------------------------
+// InPort
+// ----------------------------------------------------------------------
+const char* inport_doc = "TBD: input port";
+
+static PyTypeObject IF1_InPortType;
+
 typedef struct {
   PyObject_HEAD
 
@@ -13,34 +20,12 @@ typedef struct {
   PyObject* literaltype;
 } IF1_InPortObject;
 
-const char* IF1_inport_doc = "TBD: input port";
-static PyTypeObject IF1_InPortType = {
-    PyVarObject_HEAD_INIT(NULL, 0)
-    "IF1.InPort",             /* tp_name */
-    sizeof(IF1_InPortObject), /* tp_basicsize */
-    0,                         /* tp_itemsize */
-    0,                         /* tp_dealloc */
-    0,                         /* tp_print */
-    0,                         /* tp_getattr */
-    0,                         /* tp_setattr */
-    0,                         /* tp_compare */
-    0,                         /* tp_repr */
-    0,                         /* tp_as_number */
-    0,                         /* tp_as_sequence */
-    0,                         /* tp_as_mapping */
-    0,                         /* tp_hash */
-    0,                         /* tp_call */
-    0,                         /* tp_str */
-    0,                         /* tp_getattro */
-    0,                         /* tp_setattro */
-    0,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT,        /* tp_flags */
-    IF1_inport_doc,             /* tp_doc */
-    0,                       // tp_traverse
-    0,                       // tp_clear
-    0,                       // tp_richcompare
-    0, // tp_weaklistoffset
-};
+// ----------------------------------------------------------------------
+// Node
+// ----------------------------------------------------------------------
+const char* node_doc = "TBD: node";
+
+static PyTypeObject IF1_NodeType;
 
 typedef struct {
   PyObject_HEAD
@@ -48,8 +33,7 @@ typedef struct {
   PyObject* parent;
   long opcode;
   
-  // Optional name (function graphs)
-  PyObject* name;
+  PyObject* children;
 
   // Weak reference support
   PyObject* weak;
@@ -57,39 +41,39 @@ typedef struct {
 
 static PyMemberDef node_members[] = {
   {(char*)"opcode",T_LONG,offsetof(IF1_NodeObject,opcode),0,(char*)"op code: IFPlus, IFMinus, ..."},
-  {(char*)"name",T_OBJECT,offsetof(IF1_NodeObject,name),0,(char*)"Function graph name (None for others)"},
+  {(char*)"children",T_OBJECT_EX,offsetof(IF1_NodeObject,children),READONLY,(char*)"children of componds (or exception)"},
   {NULL}
 };
 
-const char* IF1_node_doc = "TBD: node";
+// ----------------------------------------------------------------------
+// Graph
+// ----------------------------------------------------------------------
+const char* graph_doc = "TBD: Graph (isa Node)";
 
-static PyTypeObject IF1_NodeType = {
-    PyVarObject_HEAD_INIT(NULL, 0)
-    "IF1.Node",             /* tp_name */
-    sizeof(IF1_NodeObject), /* tp_basicsize */
-    0,                         /* tp_itemsize */
-    0,                         /* tp_dealloc */
-    0,                         /* tp_print */
-    0,                         /* tp_getattr */
-    0,                         /* tp_setattr */
-    0,                         /* tp_compare */
-    0,                         /* tp_repr */
-    0,                         /* tp_as_number */
-    0,                         /* tp_as_sequence */
-    0,                         /* tp_as_mapping */
-    0,                         /* tp_hash */
-    0,                         /* tp_call */
-    0,                         /* tp_str */
-    0,                         /* tp_getattro */
-    0,                         /* tp_setattro */
-    0,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT,        /* tp_flags */
-    IF1_node_doc,             /* tp_doc */
-    0,                       // tp_traverse
-    0,                       // tp_clear
-    0,                       // tp_richcompare
-    offsetof(IF1_NodeObject,weak) // tp_weaklistoffset
+static PyTypeObject IF1_GraphType;
+
+typedef struct {
+  IF1_NodeObject node;
+
+  // Optional name (function graphs)
+  PyObject* name;
+
+} IF1_GraphObject;
+
+static PyMemberDef graph_members[] = {
+  {(char*)"name",T_OBJECT,offsetof(IF1_GraphObject,name),0,(char*)"Optional graph name"},
+  {NULL}
 };
+
+
+// ----------------------------------------------------------------------
+// Type
+// ----------------------------------------------------------------------
+const char* type_doc =
+  "TODO: Add docsn for type\n"
+  ;
+
+static PyTypeObject IF1_TypeType;
 
 typedef struct {
   PyObject_HEAD
@@ -103,15 +87,23 @@ typedef struct {
   // Weak reference slot
   PyObject* weak;
 } IF1_TypeObject;
-const char* IF1_type_doc =
-  "TODO: Add docsn for type\n"
-  ;
 
 static PyMemberDef type_members[] = {
   {(char*)"code",T_LONG,offsetof(IF1_TypeObject,code),READONLY,(char*)"type code: IF_Array, IF_Basic..."},
   {(char*)"name",T_OBJECT,offsetof(IF1_TypeObject,name),0,(char*)"type name or None"},
   {NULL}  /* Sentinel */
 };
+
+PyNumberMethods type_number;
+
+// ----------------------------------------------------------------------
+// Module
+// ----------------------------------------------------------------------
+const char* module_doc =
+  "TODO: Add docs for module\n"
+  ;
+
+static PyTypeObject IF1_ModuleType;
 
 typedef struct {
   PyObject_HEAD
@@ -123,9 +115,8 @@ typedef struct {
   // Weak reference slot
   PyObject* weak;
 } IF1_ModuleObject;
-const char* IF1_module_doc =
-  "TODO: Add docs for module\n"
-  ;
+
+
 static PyMemberDef module_members[] = {
   {(char*)"__dict__",T_OBJECT_EX,offsetof(IF1_ModuleObject,dict),0,(char*)"instance dictionary"},
   {(char*)"types",T_OBJECT_EX,offsetof(IF1_ModuleObject,types),0,(char*)"type table"},
@@ -134,36 +125,77 @@ static PyMemberDef module_members[] = {
   {NULL}  /* Sentinel */
 };
 
+/*
+  ###         ###                #    
+   #          #  #               #    
+   #    ###   #  #   ##   ###   ###   
+   #    #  #  ###   #  #  #  #   #    
+   #    #  #  #     #  #  #      #    
+  ###   #  #  #      ##   #       ##  
+*/
 
-static PyTypeObject IF1_TypeType = {
-    PyVarObject_HEAD_INIT(NULL, 0)
-    "IF1.Type",             /* tp_name */
-    sizeof(IF1_TypeObject), /* tp_basicsize */
-    0,                         /* tp_itemsize */
-    0,                         /* tp_dealloc */
-    0,                         /* tp_print */
-    0,                         /* tp_getattr */
-    0,                         /* tp_setattr */
-    0,                         /* tp_compare */
-    0,                         /* tp_repr */
-    0,                         /* tp_as_number */
-    0,                         /* tp_as_sequence */
-    0,                         /* tp_as_mapping */
-    0,                         /* tp_hash */
-    0,                         /* tp_call */
-    0,                         /* tp_str */
-    0,                         /* tp_getattro */
-    0,                         /* tp_setattro */
-    0,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT,        /* tp_flags */
-    IF1_type_doc,             /* tp_doc */
-    0,                       // tp_traverse
-    0,                       // tp_clear
-    0,                       // tp_richcompare
-    offsetof(IF1_TypeObject,weak) // tp_weaklistoffset
-};
+static PyObject* node_inport(PyObject* pySelf, PyObject* args, PyObject* kwargs) {
+  PyObject* p = PyType_GenericNew(&IF1_InPortType,NULL,NULL);
+  return p;
+}
 
-PyNumberMethods type_number;
+void inport_dealloc(PyObject* pySelf) {
+  IF1_InPortObject* self = reinterpret_cast<IF1_InPortObject*>(pySelf);
+
+  Py_XDECREF(self->weaknode);
+  Py_XDECREF(self->weaksrc);
+  Py_XDECREF(self->literal);
+  Py_XDECREF(self->literaltype);
+
+  Py_TYPE(pySelf)->tp_free(pySelf);
+}
+
+/*
+  #  #           #        
+  ## #           #        
+  ## #   ##    ###   ##   
+  # ##  #  #  #  #  # ##  
+  # ##  #  #  #  #  ##    
+  #  #   ##    ###   ##  
+*/
+void node_dealloc(PyObject* pySelf) {
+  IF1_NodeObject* self = reinterpret_cast<IF1_NodeObject*>(pySelf);
+  if (self->weak) PyObject_ClearWeakRefs(pySelf);
+
+  Py_XDECREF(self->module);
+  Py_XDECREF(self->parent);
+  Py_XDECREF(self->children);
+
+  Py_TYPE(pySelf)->tp_free(pySelf);
+}
+
+/*
+   ##                     #     
+  #  #                    #     
+  #     ###    ###  ###   ###   
+  # ##  #  #  #  #  #  #  #  #  
+  #  #  #     # ##  #  #  #  #  
+   ###  #      # #  ###   #  #  
+                    #           
+ */
+
+void graph_dealloc(PyObject* pySelf) {
+  IF1_GraphObject* self = reinterpret_cast<IF1_GraphObject*>(pySelf);
+
+  Py_XDECREF(self->name);
+  node_dealloc(pySelf);
+}
+
+/*
+  ###                     
+   #                      
+   #    #  #  ###    ##   
+   #    #  #  #  #  # ##  
+   #     # #  #  #  ##    
+   #      #   ###    ## 
+   #     #    #
+ */
+
 
 void type_dealloc(PyObject* pySelf) {
   IF1_TypeObject* self = reinterpret_cast<IF1_TypeObject*>(pySelf);
@@ -187,7 +219,6 @@ long type_label(PyObject* pySelf) {
   PyErr_SetString(PyExc_RuntimeError,"disconnected type");
   return -1;
 }
-
 
 PyObject* type_int(PyObject* self) {
   long label = type_label(self);
@@ -444,6 +475,7 @@ PyObject* type_get_parameter2(PyObject* pySelf,void*) {
 PyObject* type_get_label(PyObject* self,void*) {
   return type_int(self);
 }
+
 PyGetSetDef type_getset[] = {
   {(char*)"aux",type_get_aux,NULL,(char*)"aux code (basic only)",NULL},
   {(char*)"parameter1",type_get_parameter1,NULL,(char*)"parameter1 type (if any)",NULL},
@@ -453,33 +485,16 @@ PyGetSetDef type_getset[] = {
   {NULL}
 };
 
-static PyTypeObject IF1_ModuleType = {
-    PyVarObject_HEAD_INIT(NULL, 0)
-    "IF1.Module",             /* tp_name */
-    sizeof(IF1_ModuleObject), /* tp_basicsize */
-    0,                         /* tp_itemsize */
-    0,                         /* tp_dealloc */
-    0,                         /* tp_print */
-    0,                         /* tp_getattr */
-    0,                         /* tp_setattr */
-    0,                         /* tp_compare */
-    0,                         /* tp_repr */
-    0,                         /* tp_as_number */
-    0,                         /* tp_as_sequence */
-    0,                         /* tp_as_mapping */
-    0,                         /* tp_hash */
-    0,                         /* tp_call */
-    0,                         /* tp_str */
-    0,                         /* tp_getattro */
-    0,                         /* tp_setattro */
-    0,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT,        /* tp_flags */
-    IF1_module_doc,           /* tp_doc */
-    0,                       // tp_traverse
-    0,                       // tp_clear
-    0,                       // tp_richcompare
-    offsetof(IF1_ModuleObject,weak) // tp_weaklistoffset
-};
+/*
+                    #                       
+   #   #            #           ##          
+   ## ##            #            #          
+   # # #   ##     ###   #  #     #     ##   
+   # # #  #  #   #  #   #  #     #    # ##  
+   #   #  #  #   #  #   #  #     #    ##    
+   #   #   ##     ###    ###    ###    ###  
+*/
+
 
 static PyObject* rawtype(PyObject* module,
                          unsigned long code,
@@ -550,45 +565,6 @@ static PyObject* rawtype(IF1_ModuleObject* module,
 		 name,
 		 NULL);
 }
-
-#if 0
-static ssize_t addtype(PyObject* weak, PyObject* types, unsigned long code, unsigned long parameter1, unsigned long parameter2, PyObject* name, const char* cname) {
-  // If we already have an item, return it's offset
-  for(ssize_t i=0;i<PyList_GET_SIZE(types);++i) {
-    PyObject* p /*borrowed*/ = PyList_GET_ITEM(types,i);
-    IF1_TypeObject* t = reinterpret_cast<IF1_TypeObject*>(p);
-    if (t->code == code && parameter1 == t->parameter1 && parameter2 == t->parameter2 ) return i;
-  }
-
-  PyObject* a = PyType_GenericNew(&IF1_TypeType,NULL,NULL);
-  Py_INCREF(((IF1_TypeObject*)a)->module = weak);
-  ((IF1_TypeObject*)a)->code = code;
-  ((IF1_TypeObject*)a)->parameter1 = parameter1;
-  ((IF1_TypeObject*)a)->parameter2 = parameter2;
-  if (name) {
-    Py_INCREF(((IF1_TypeObject*)a)->name = name);
-  } else if (cname) {
-    ((IF1_TypeObject*)a)->name = PyString_FromString(cname);
-    if (!((IF1_TypeObject*)a)->name) return -1;
-  } else {
-    ((IF1_TypeObject*)a)->name = NULL;
-  }
-  if (PyList_Append(types,a) != 0) return -1;
-  Py_DECREF(a);
-  return PyList_GET_SIZE(types)-1;
-}
-
-static PyObject* addtype(IF1_ModuleObject* self, unsigned long code, unsigned long parameter1, unsigned long parameter2, PyObject* name) {
-  PyObject* weak /*owned*/= PyWeakref_NewRef((PyObject*)self,NULL);
-  if (!weak) return NULL;
-  ssize_t idx = addtype(weak,self->types,code,parameter1,parameter2,name,NULL);
-  if (idx < 0) { Py_DECREF(weak); return NULL; }
-  PyObject* t = PyList_GetItem(self->types,idx);
-  Py_XINCREF(t);
-  Py_DECREF(weak);
-  return t;
-}
-#endif
 
 int module_init(PyObject* pySelf, PyObject* args, PyObject* kwargs) {
   IF1_ModuleObject* self = reinterpret_cast<IF1_ModuleObject*>(pySelf);
@@ -908,11 +884,11 @@ PyObject* module_addfunction(PyObject* pySelf,PyObject* args) {
   long opcode = IFXGraph;
   if (!PyArg_ParseTuple(args,"O!|l",&PyString_Type,&name,&opcode)) return NULL;
 
-  PyObject* N /*owned*/ = PyType_GenericNew(&IF1_NodeType,NULL,NULL);
+  PyObject* N /*owned*/ = PyType_GenericNew(&IF1_GraphType,NULL,NULL);
   if (!N) return NULL;
-  IF1_NodeObject* G = reinterpret_cast<IF1_NodeObject*>(N);
+  IF1_GraphObject* G = reinterpret_cast<IF1_GraphObject*>(N);
 
-  G->name = name;
+  Py_INCREF(G->name = name);
 
   PyList_Append(self->functions,N);
 
@@ -930,10 +906,14 @@ static PyGetSetDef module_getset[] = {
   {NULL}
 };
 
-static PyObject* node_inport(PyObject* pySelf, PyObject* args, PyObject* kwargs) {
-  PyObject* p = PyType_GenericNew(&IF1_InPortType,NULL,NULL);
-  return p;
-}
+/*
+   ###    ####    #    
+    #     #      ##    
+    #     ###     #    
+    #     #       #    
+    #     #       #    
+   ###    #      ###  
+ */
 
 static PyMethodDef IF1_methods[] = {
     {NULL}  /* Sentinel */
@@ -947,8 +927,74 @@ initif1(void)
 {
   PyObject* m;
 
+  // ----------------------------------------------------------------------
+  // Setup
+  // ----------------------------------------------------------------------
+  m = Py_InitModule3("sap.if1", IF1_methods,
+		     "Example module that creates an extension type.");
+  if (!m) return;
+
+  // ----------------------------------------------------------------------
+  // InPort
+  // ----------------------------------------------------------------------
+  IF1_InPortType.tp_name = "if1.InPort";
+  IF1_InPortType.tp_basicsize = sizeof(IF1_InPortObject);
+  IF1_InPortType.tp_flags = Py_TPFLAGS_DEFAULT;
+  IF1_InPortType.tp_doc = inport_doc;
+  IF1_InPortType.tp_dealloc = inport_dealloc;
   if (PyType_Ready(&IF1_InPortType) < 0) return;
 
+  // ----------------------------------------------------------------------
+  // Node
+  // ----------------------------------------------------------------------
+  IF1_NodeType.tp_name = "if1.Node";
+  IF1_NodeType.tp_basicsize = sizeof(IF1_NodeObject);
+  IF1_NodeType.tp_flags = Py_TPFLAGS_DEFAULT;
+  IF1_NodeType.tp_doc = node_doc;
+  IF1_NodeType.tp_dealloc = node_dealloc;
+  IF1_NodeType.tp_members = node_members;
+  IF1_NodeType.tp_call = node_inport;
+  if (PyType_Ready(&IF1_NodeType) < 0) return;
+
+  // ----------------------------------------------------------------------
+  // Graph
+  // ----------------------------------------------------------------------
+  IF1_GraphType.tp_name = "if1.Graph";
+  IF1_GraphType.tp_basicsize = sizeof(IF1_GraphObject);
+  IF1_GraphType.tp_base = &IF1_NodeType;
+  IF1_GraphType.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE;
+  IF1_GraphType.tp_doc = graph_doc;
+  IF1_GraphType.tp_dealloc = graph_dealloc;
+  IF1_GraphType.tp_members = graph_members;
+  if (PyType_Ready(&IF1_GraphType) < 0) return;
+
+  // ----------------------------------------------------------------------
+  // Type
+  // ----------------------------------------------------------------------
+  IF1_TypeType.tp_name = "if1.Type";
+  IF1_TypeType.tp_basicsize = sizeof(IF1_TypeObject);
+  IF1_TypeType.tp_flags = Py_TPFLAGS_DEFAULT;
+  IF1_TypeType.tp_doc = type_doc;
+  IF1_TypeType.tp_weaklistoffset = offsetof(IF1_TypeObject,weak);
+  IF1_TypeType.tp_dealloc = type_dealloc;
+  IF1_TypeType.tp_str = type_str;
+  IF1_TypeType.tp_repr = type_str;
+  IF1_TypeType.tp_members = type_members;
+  IF1_TypeType.tp_getset = type_getset;
+  IF1_TypeType.tp_as_number = &type_number;
+  type_number.nb_int = type_int;
+  if (PyType_Ready(&IF1_TypeType) < 0) return;
+  Py_INCREF(&IF1_TypeType);
+  PyModule_AddObject(m, "Type", (PyObject *)&IF1_TypeType);
+
+  // ----------------------------------------------------------------------
+  // Module
+  // ----------------------------------------------------------------------
+  IF1_ModuleType.tp_name = "if1.Module";
+  IF1_ModuleType.tp_basicsize = sizeof(IF1_ModuleObject);
+  IF1_ModuleType.tp_flags = Py_TPFLAGS_DEFAULT;
+  IF1_ModuleType.tp_doc = module_doc;
+  IF1_ModuleType.tp_weaklistoffset = offsetof(IF1_ModuleObject,weak);
   IF1_ModuleType.tp_new = PyType_GenericNew;
   IF1_ModuleType.tp_init = module_init;
   IF1_ModuleType.tp_dealloc = module_dealloc;
@@ -959,30 +1005,13 @@ initif1(void)
   IF1_ModuleType.tp_getset = module_getset;
   IF1_ModuleType.tp_getattro = PyObject_GenericGetAttr;
   IF1_ModuleType.tp_dictoffset = offsetof(IF1_ModuleObject,dict);
-  if (PyType_Ready(&IF1_ModuleType) < 0)
-    return;
-
-  IF1_TypeType.tp_dealloc = type_dealloc;
-  IF1_TypeType.tp_str = type_str;
-  IF1_TypeType.tp_repr = type_str;
-  IF1_TypeType.tp_members = type_members;
-  IF1_TypeType.tp_getset = type_getset;
-  IF1_TypeType.tp_as_number = &type_number;
-  type_number.nb_int = type_int;
-  if (PyType_Ready(&IF1_TypeType) < 0) return;
-
-  IF1_NodeType.tp_members = node_members;
-  IF1_NodeType.tp_call = node_inport;
-  if (PyType_Ready(&IF1_NodeType) < 0) return;
-
-  m = Py_InitModule3("sap.if1", IF1_methods,
-		     "Example module that creates an extension type.");
-
+  if (PyType_Ready(&IF1_ModuleType) < 0) return;
   Py_INCREF(&IF1_ModuleType);
   PyModule_AddObject(m, "Module", (PyObject *)&IF1_ModuleType);
-  Py_INCREF(&IF1_TypeType);
-  PyModule_AddObject(m, "Type", (PyObject *)&IF1_TypeType);
 
+  // ----------------------------------------------------------------------
+  // Export macros
+  // ----------------------------------------------------------------------
   PyModule_AddIntMacro(m,IF_Array);
   PyModule_AddIntMacro(m,IF_Basic);
   PyModule_AddIntMacro(m,IF_Field);
