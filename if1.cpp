@@ -11,6 +11,206 @@ PyObject* COMMA = NULL; // ,
 PyObject* LPAREN = NULL; // (
 PyObject* RPAREN = NULL; // )
 
+enum literal_parser_state_t {
+  ERROR = 0,
+  START,
+  INTEGER,
+  REAL,
+  REAL_EXP_OPTSIGN,
+  REAL_EXP_DIGIT,
+  REAL_EXP,
+  DOUBLEREAL_EXP_OPTSIGN,
+  DOUBLEREAL_EXP_DIGIT,
+  DOUBLEREAL_EXP,
+  NIL0,
+  NIL1,
+  NIL2,
+  TRUE0,
+  TRUE1,
+  TRUE2,
+  TRUE3,
+  FALSE0,
+  FALSE1,
+  FALSE2,
+  FALSE3,
+  FALSE4,
+  CHAR_BODY,
+  CHAR_ESCAPE,
+  CHAR_END,
+  CHAR_NULL,
+  STRING_BODY,
+  STRING_ESCAPE,
+  STRING_END,
+  NSTATES,		// Just marks the last state
+  BOOLEAN_LITERAL = -1,
+  CHAR_LITERAL = -2,
+  DOUBLEREAL_LITERAL = -3,
+  INTEGER_LITERAL = -4,
+  NULL_LITERAL = -5,
+  REAL_LITERAL = -6,
+  STRING_LITERAL = -7
+};
+
+bool initialize_literal_parser_table(literal_parser_state_t table[]) {
+  // Initialize all entries to ERROR
+  for(int i=0;i<NSTATES*256;++i) table[i] = ERROR;
+
+  // ----------------------------------------------------------------------
+  // In the start state, we figure out what kind of literal this "looks like"
+  // ----------------------------------------------------------------------
+  table[START*256+'n'] = NIL0;
+  table[START*256+'N'] = NIL0;
+  table[START*256+'t'] = TRUE0;
+  table[START*256+'T'] = TRUE0;
+  table[START*256+'f'] = FALSE0;
+  table[START*256+'F'] = FALSE0;
+  table[START*256+'0'] = INTEGER;
+  table[START*256+'1'] = INTEGER;
+  table[START*256+'2'] = INTEGER;
+  table[START*256+'3'] = INTEGER;
+  table[START*256+'4'] = INTEGER;
+  table[START*256+'5'] = INTEGER;
+  table[START*256+'6'] = INTEGER;
+  table[START*256+'7'] = INTEGER;
+  table[START*256+'8'] = INTEGER;
+  table[START*256+'9'] = INTEGER;
+  table[START*256+'+'] = INTEGER;
+  table[START*256+'-'] = INTEGER;
+  table[START*256+'\''] = CHAR_BODY;
+  table[START*256+'"'] = STRING_BODY;
+
+  // ----------------------------------------------------------------------
+  // Booleans are true or false
+  // ----------------------------------------------------------------------
+  table[TRUE0*256+'r'] = TRUE1;
+  table[TRUE0*256+'R'] = TRUE1;
+  table[TRUE1*256+'u'] = TRUE2;
+  table[TRUE1*256+'U'] = TRUE2;
+  table[TRUE2*256+'e'] = TRUE3;
+  table[TRUE2*256+'E'] = TRUE3;
+  table[TRUE3*256+0] = BOOLEAN_LITERAL;
+
+  table[FALSE0*256+'a'] = FALSE1;
+  table[FALSE0*256+'A'] = FALSE1;
+  table[FALSE1*256+'l'] = FALSE2;
+  table[FALSE1*256+'L'] = FALSE2;
+  table[FALSE2*256+'s'] = FALSE3;
+  table[FALSE2*256+'S'] = FALSE3;
+  table[FALSE3*256+'e'] = FALSE4;
+  table[FALSE3*256+'E'] = FALSE4;
+  table[FALSE4*256+0] = BOOLEAN_LITERAL;
+
+  // ----------------------------------------------------------------------
+  // Characters are single quote with an escape
+  // ----------------------------------------------------------------------
+  for(char c=' '; c < 127; ++c) {
+    if (c == '\\') {
+      table[CHAR_BODY*256+c] = CHAR_ESCAPE;
+    } else if (c == '\'') {
+      table[CHAR_BODY*256+c] = ERROR;
+    } else {
+      table[CHAR_BODY*256+c] = CHAR_END;
+    }
+  }
+
+  for(char c=' '; c < 127; ++c) {
+    table[CHAR_ESCAPE*256+c] = CHAR_END;
+  }
+
+  table[CHAR_END*256+'\''] = CHAR_NULL;
+  table[CHAR_NULL*256+0] = CHAR_LITERAL;
+
+  // ----------------------------------------------------------------------
+  // DoubleReal
+  // ----------------------------------------------------------------------      
+  table[DOUBLEREAL_EXP_OPTSIGN*256+0] = DOUBLEREAL_LITERAL;
+  table[DOUBLEREAL_EXP_OPTSIGN*256+'+'] = DOUBLEREAL_EXP_DIGIT;
+  table[DOUBLEREAL_EXP_OPTSIGN*256+'-'] = DOUBLEREAL_EXP_DIGIT;
+  for(char c='0'; c <= '9'; ++c) {
+    table[DOUBLEREAL_EXP_OPTSIGN*256+c] = DOUBLEREAL_EXP;
+  }
+
+  for(char c='0'; c <= '9'; ++c) {
+    table[DOUBLEREAL_EXP_DIGIT*256+c] = DOUBLEREAL_EXP;
+  }
+
+  table[DOUBLEREAL_EXP*256+0] = DOUBLEREAL_LITERAL;
+  for(char c='0'; c <= '9'; ++c) {
+    table[DOUBLEREAL_EXP*256+c] = DOUBLEREAL_EXP;
+  }
+
+  // ----------------------------------------------------------------------
+  // Integer
+  // ----------------------------------------------------------------------  
+  table[INTEGER*256+0] = INTEGER_LITERAL;
+  for(char c='0'; c <= '9'; ++c) {
+    table[INTEGER*256+c] = INTEGER;
+  }
+  table[INTEGER*256+'.'] = REAL;
+  table[INTEGER*256+'e'] = REAL_EXP_OPTSIGN;
+  table[INTEGER*256+'E'] = REAL_EXP_OPTSIGN;
+  table[INTEGER*256+'d'] = DOUBLEREAL_EXP_OPTSIGN;
+  table[INTEGER*256+'D'] = DOUBLEREAL_EXP_OPTSIGN;
+
+  // ----------------------------------------------------------------------
+  // Null
+  // ----------------------------------------------------------------------      
+  table[NIL0*256+'i'] = NIL1;
+  table[NIL0*256+'I'] = NIL1;
+  table[NIL1*256+'l'] = NIL2;
+  table[NIL1*256+'L'] = NIL2;
+  table[NIL2*256+  0] = NULL_LITERAL;
+
+  // ----------------------------------------------------------------------
+  // Real
+  // ----------------------------------------------------------------------      
+  table[REAL*256+0] = REAL_LITERAL;
+  for(char c='0'; c <= '9'; ++c) {
+    table[REAL*256+c] = REAL;
+  }
+  table[REAL*256+'e'] = REAL_EXP_OPTSIGN;
+  table[REAL*256+'E'] = REAL_EXP_OPTSIGN;
+  table[REAL*256+'d'] = DOUBLEREAL_EXP_OPTSIGN;
+  table[REAL*256+'D'] = DOUBLEREAL_EXP_OPTSIGN;
+      
+  table[REAL_EXP_OPTSIGN*256+0] = REAL_LITERAL;
+  table[REAL_EXP_OPTSIGN*256+'+'] = REAL_EXP_DIGIT;
+  table[REAL_EXP_OPTSIGN*256+'-'] = REAL_EXP_DIGIT;
+  for(char c='0'; c <= '9'; ++c) {
+    table[REAL_EXP_OPTSIGN*256+c] = REAL_EXP;
+  }
+
+  for(char c='0'; c <= '9'; ++c) {
+    table[REAL_EXP_DIGIT*256+c] = REAL_EXP;
+  }
+
+  table[REAL_EXP*256+0] = REAL_LITERAL;
+  for(char c='0'; c <= '9'; ++c) {
+    table[REAL_EXP*256+c] = REAL_EXP;
+  }
+
+  // ----------------------------------------------------------------------
+  // String
+  // ----------------------------------------------------------------------
+  for(char c=' '; c < 127; ++c) {
+    if (c == '\\') {
+      table[STRING_BODY*256+c] = STRING_ESCAPE;
+    } else if (c == '"') {
+      table[STRING_BODY*256+c] = STRING_END;
+    } else {
+      table[STRING_BODY*256+c] = STRING_BODY;
+    }
+  }
+  for(char c=' '; c < 127; ++c) {
+    table[STRING_ESCAPE*256+c] = STRING_BODY;
+  }
+  table[STRING_END*256+0] = STRING_LITERAL;
+
+  return true;
+}
+
+
+
 // ----------------------------------------------------------------------
 // InPort
 // ----------------------------------------------------------------------
@@ -37,8 +237,8 @@ static PyTypeObject IF1_NodeType;
 
 typedef struct {
   PyObject_HEAD
-  PyObject* module; // Weak link to module
-  PyObject* parent;
+  PyObject* weakmodule;
+  PyObject* weakparent;
   long opcode;
   
   PyObject* children;
@@ -170,10 +370,44 @@ PyObject* inport_str(PyObject* pySelf) {
   return sport;
 }
 
+PyObject* inport_literal(PyObject* module, PyObject* literal) {
+
+    static literal_parser_state_t table[NSTATES*256];
+    static bool table_ready = false;
+    if (!table_ready) table_ready = initialize_literal_parser_table(table);
+
+    const char* p = PyString_AS_STRING(literal);
+    literal_parser_state_t state = START;
+    while(state > 0) {
+      state = table[state*256+*p++];
+    }
+
+    switch(state) {
+    case BOOLEAN_LITERAL: return PyObject_GetAttrString(module,"boolean");
+    case CHAR_LITERAL: return PyObject_GetAttrString(module,"character");
+    case DOUBLEREAL_LITERAL: return PyObject_GetAttrString(module,"doublereal");
+    case INTEGER_LITERAL: return PyObject_GetAttrString(module,"integer");
+    case NULL_LITERAL: return PyObject_GetAttrString(module,"null");
+    case REAL_LITERAL: return PyObject_GetAttrString(module,"real");
+    case STRING_LITERAL: return PyObject_GetAttrString(module,"string");
+
+    case ERROR: return PyErr_Format(PyExc_ValueError,"unparseable literal: %s at %c",PyString_AS_STRING(literal),*p);
+    default:
+      ;
+    }
+    return PyErr_Format(PyExc_NotImplementedError,"should be impossible");
+}
+
 PyObject* inport_lshift(PyObject* pySelf, PyObject* other) {
-  // Do we get a literal?
+  IF1_InPortObject* self = reinterpret_cast<IF1_InPortObject*>(pySelf);
+  PyObject* src /*borrowed*/ = PyWeakref_GET_OBJECT(self->weaksrc);
+  if (src == Py_None) return PyErr_Format(PyExc_RuntimeError,"disconnected port");
+  PyObject* module /*borrowed*/ = PyWeakref_GET_OBJECT(reinterpret_cast<IF1_NodeObject*>(src)->weakmodule);
+  if (module == Py_None) return PyErr_Format(PyExc_RuntimeError,"disconnected port");
+
+  // Do we get a literal?  Figure out the type
   if (PyString_Check(other)) {
-    return PyString_FromString("literal");
+    return inport_literal(module,other);
   }
 
   return PyErr_Format(PyExc_NotImplementedError,"lshift for oports");
@@ -191,8 +425,8 @@ void node_dealloc(PyObject* pySelf) {
   IF1_NodeObject* self = reinterpret_cast<IF1_NodeObject*>(pySelf);
   if (self->weak) PyObject_ClearWeakRefs(pySelf);
 
-  Py_XDECREF(self->module);
-  Py_XDECREF(self->parent);
+  Py_XDECREF(self->weakmodule);
+  Py_XDECREF(self->weakparent);
   Py_XDECREF(self->children);
 
   Py_TYPE(pySelf)->tp_free(pySelf);
@@ -642,6 +876,10 @@ int module_init(PyObject* pySelf, PyObject* args, PyObject* kwargs) {
   if (!wild) return -1;
   Py_DECREF(wild);
 
+  PyObject* string /*owned*/ = rawtype(pySelf,IF_Array,0,character,NULL,NULL,"string");
+  if (!string) return -1;
+  Py_DECREF(string);
+
   for(int i=0;i<PyList_GET_SIZE(self->types);++i) {
     PyObject* p /*borrowed*/ = PyList_GET_ITEM(self->types,i);
     IF1_TypeObject* t /*borrowed*/ = reinterpret_cast<IF1_TypeObject*>(p);
@@ -916,9 +1154,9 @@ PyObject* module_addfunction(PyObject* pySelf,PyObject* args) {
   if (!N) return NULL;
   IF1_GraphObject* G = reinterpret_cast<IF1_GraphObject*>(N);
   
-  G->node.module = PyWeakref_NewRef(pySelf,0);
-  if ( !G->node.module ) return NULL;
-  G->node.parent = NULL; // Top level graph
+  G->node.weakmodule = PyWeakref_NewRef(pySelf,0);
+  if ( !G->node.weakmodule ) return NULL;
+  G->node.weakparent = NULL; // Top level graph
   G->node.opcode = opcode;
   G->node.children = PyList_New(0);
 
