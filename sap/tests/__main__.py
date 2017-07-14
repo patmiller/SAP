@@ -37,7 +37,7 @@ multiple[boolean]
 ->(real)
 >>> m.addtype(IF_Function,(),m.real)
 ->(real)
->>> for x in m.if1: print x
+>>> print m.if1
 T 1 1 0 %na=boolean
 T 2 1 1 %na=character
 T 3 1 2 %na=doublereal
@@ -62,6 +62,7 @@ T 21 3 0 15
 C$  C IF1 Check
 C$  D Dataflow ordered
 C$  F Python Frontend
+<BLANKLINE>
 """
 
 import sap.if1
@@ -71,6 +72,7 @@ class TestIF1(unittest.TestCase):
     def test_fail(self):
         m = sap.if1.Module()
         g = m.addfunction("main")
+        print g,+g
 
         LiteralTests = {
             'error': [
@@ -115,15 +117,27 @@ if __name__ == '__main__':
     m = sap.if1.Module()
     g = m.addfunction("main")
     
+    print g
     print g.name
     print g.opcode
     print g.type
-    print g
-    print g(1),g(3)
+    g(1) << "3"
+    print g.type
+    g(2) << "7.5"
+    print g.type
+    g(2) << None
+    print g.if1
+    
+    m.pragmas['C'] = 'IF1 Check'
+    m.pragmas['D'] = 'Dataflow ordered'
+    m.pragmas['F'] = 'Python Frontend'
 
+    print
+    print m.if1
+    import os; print os.getcwd()
+    open('../../three.if1','w').write(m.if1)
 
     import doctest
     doctest.testmod()
-
     unittest.main()
     
