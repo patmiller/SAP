@@ -7,6 +7,9 @@
 PyObject* OPNAMES = NULL;
 PyObject* OPCODES = NULL;
 
+PyObject* FUNCTIONTYPE = nullptr;
+
+PyObject* ADDTYPE = NULL; // addtype
 PyObject* ARROW = NULL; // ->
 PyObject* COLON = NULL; // :
 PyObject* COMMA = NULL; // ,
@@ -717,10 +720,8 @@ PyObject* graph_get_type(PyObject* pySelf,void*) {
     Py_INCREF(T);
   }
   PyObject* module /*borrowed*/ = node_module(pySelf);
-  PyObject* ADDTYPE = PyString_FromString("addtype");
-  PyObject* FUNCTIONTYPE = PyInt_FromLong(IF_Function);
   PyObject* T /*owned*/ = PyObject_CallMethodObjArgs(module,ADDTYPE,FUNCTIONTYPE,inputs,outputs,0);
-  Py_DECREF(inputs); Py_DECREF(outputs); 
+  Py_DECREF(inputs); Py_DECREF(outputs);
   if (!T) return nullptr;
   return T;
 }
@@ -1149,7 +1150,7 @@ static PyObject* rawtype(PyObject* module,
     T->name = NULL;
   }
 
-  if (PyList_Append(typelist,result) != 0) { Py_DECREF(T); return NULL;}
+  if (PyList_Append(typelist,result) != 0) { Py_DECREF(result); return NULL;}
 
   return result;
 }
@@ -1250,20 +1251,21 @@ PyObject* module_get_if1(PyObject* pySelf,void*) {
   PyObject* result = PyString_FromString("");
   if (!result) return NULL;
 
-  // Add if1 for all the types
-  PyObject* titer /*owned*/ = PyObject_GetIter(self->types);
-  if (!titer) { Py_DECREF(result); return NULL; }
-  PyObject* T;
-  PyErr_Clear();
-  while((T = PyIter_Next(titer))) {
-    PyObject* if1 /*owned*/ = PyObject_GetAttrString(T,"if1");
-    Py_DECREF(T);
-    PyString_ConcatAndDel(&result,if1);
-    if (!result) {Py_DECREF(titer); return nullptr; }
-    PyString_Concat(&result,NEWLINE);
-    if (!result) {Py_DECREF(titer); return nullptr; }
+  // Make sure we have a type for all the functions
+  for(ssize_t i=0; i<PyList_GET_SIZE(self->functions); ++i) {
+    PyObject* T = PyObject_GetAttrString(PyList_GET_ITEM(self->functions,i),"type");
+    Py_XDECREF(T);
   }
-  Py_DECREF(titer);
+  PyErr_Clear();
+
+  // Add if1 for all the types
+  for(ssize_t i=0;i<PyList_GET_SIZE(self->types);++i) {
+    PyObject* if1 /*owned*/ = PyObject_GetAttrString(PyList_GET_ITEM(self->types,i),"if1");
+    PyString_ConcatAndDel(&result,if1);
+    if (!result) return nullptr;
+    PyString_Concat(&result,NEWLINE);
+    if (!result) return nullptr;
+  }
 
   // Add all the pragmas
   PyObject* key;
@@ -1283,7 +1285,7 @@ PyObject* module_get_if1(PyObject* pySelf,void*) {
     PyString_ConcatAndDel(&result,if1);
     if (!result) return nullptr;
     PyString_Concat(&result,NEWLINE);
-    if (!result) {Py_DECREF(titer); return nullptr; }
+    if (!result) nullptr;
   }
   if (PyErr_Occurred()) { Py_DECREF(result); return nullptr; }
 
@@ -1540,6 +1542,12 @@ static PyMethodDef IF1_methods[] = {
 PyMODINIT_FUNC
 initif1(void) 
 {
+  FUNCTIONTYPE = PyInt_FromLong(IF_Function);
+  if (!FUNCTIONTYPE) return;
+
+  ADDTYPE = PyString_InternFromString("addtype");
+  if (!ADDTYPE) return;
+
   ARROW = PyString_InternFromString("->");
   if (!ARROW) return;
 

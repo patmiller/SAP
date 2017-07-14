@@ -69,10 +69,32 @@ import sap.if1
 import unittest
 
 class TestIF1(unittest.TestCase):
+    def test_three(self):
+        # Paul Dubois told me to always test the first program you write in a new language
+        # with the "three" program.  In IF1, this is a simple graph with a single literal
+        # in-edge.
+        m = sap.if1.Module()
+        three = m.addfunction("main")
+        three(1) << "3"
+        self.assertEqual(m.if1,'''T 1 1 0 %na=boolean
+T 2 1 1 %na=character
+T 3 1 2 %na=doublereal
+T 4 1 3 %na=integer
+T 5 1 4 %na=null
+T 6 1 5 %na=real
+T 7 1 6 %na=wildbasic
+T 8 10 %na=wild
+T 9 0 2 %na=string
+T 10 8 4 0
+T 11 3 0 10
+X 11 "main"
+L      0 1 4 "3"
+''')
+        return
+        
     def test_fail(self):
         m = sap.if1.Module()
         g = m.addfunction("main")
-        print g,+g
 
         LiteralTests = {
             'error': [
@@ -114,28 +136,30 @@ class TestIF1(unittest.TestCase):
         return
 
 if __name__ == '__main__':
-    m = sap.if1.Module()
-    g = m.addfunction("main")
-    
-    print g
-    print g.name
-    print g.opcode
-    print g.type
-    g(1) << "3"
-    print g.type
-    g(2) << "7.5"
-    print g.type
-    g(2) << None
-    print g.if1
-    
-    m.pragmas['C'] = 'IF1 Check'
-    m.pragmas['D'] = 'Dataflow ordered'
-    m.pragmas['F'] = 'Python Frontend'
+    if 0:
+        m = sap.if1.Module()
+        g = m.addfunction("main")
 
-    print
-    print m.if1
-    import os; print os.getcwd()
-    open('../../three.if1','w').write(m.if1)
+        print g
+        print g.name
+        print g.opcode
+        print g.type
+        g(1) << "3"
+        print g.type
+        g(2) << "7.5"
+        print g.type
+        g(2) << None
+        print g.if1
+        print m.if1
+
+        m.pragmas['C'] = 'IF1 Check'
+        m.pragmas['D'] = 'Dataflow ordered'
+        m.pragmas['F'] = 'Python Frontend'
+
+        print
+        print m.if1
+        import os; print os.getcwd()
+        open('../../three.if1','w').write(m.if1)
 
     import doctest
     doctest.testmod()
