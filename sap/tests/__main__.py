@@ -194,29 +194,74 @@ T 8 10 %na=wild
 T 9 0 2 %na=string
 ''')
         return
+
+    def test_typepragmas(self):
+        m = sap.if1.Module()
         
+        # The na and name attributes are linked
+        self.assertIs(m.integer.na,m.integer.name)
+
+        # We can add arbitrary 2 character pragmas
+        m.integer.xx = 20
+        self.assertEqual(m.integer.xx,20)
+        m.integer.aa = 1
+        m.integer.bb = 2
+        m.integer.cc = 3
+
+        # We can delete pragmas (if they exist)
+        del m.integer.bb
+        with self.assertRaises(AttributeError):
+            del m.integer.qq
+
+        # We cannot set attributes with different lengths
+        with self.assertRaises(AttributeError):
+            m.integer.xxx = 10
+        with self.assertRaises(AttributeError):
+            m.integer.yyy
+
+        # You can get the whole set of pragmas as a dictionary
+        pragmas = m.integer.pragmas
+        self.assertIn('aa',pragmas)
+        self.assertIn('cc',pragmas)
+        self.assertIn('na',pragmas)
+        self.assertIn('xx',pragmas)
+
+        # Setting a pragma in this dictionary works (2 characters only)
+        pragmas['mm'] = 10
+        self.assertEqual(m.integer.mm,10)
+        pragmas['aaa'] = 20
+        with self.assertRaises(AttributeError):
+            m.integer.aaa
+
+        # Pragmas are emitted in lexical order
+        self.assertEqual(m.integer.if1,'T 4 1 3 %aa=1 %cc=3 %mm=10 %na=integer %xx=20')
+        return
 
 if __name__ == '__main__':
     m = sap.if1.Module()
 
-    print m.integer.name
-    m.integer.name = 'foobar'
-    m.real.name = None
-    del m.boolean.name
-
     g = m.addfunction("main")
-    print g,+g,+++g
-    g[1] = m.integer
-    g[2] = m.integer
-    plus = g.addnode(sap.if1.IFPlus)
-    print plus,+plus
-    plus(1) << g[1]
-    plus(2) << g[2]
-    plus[1] = m.integer
-    g(1) << plus[1]
-    g(2) << g[1]
+    g(1) << 3
+
+    #g.sf = "foo.py"
 
     print m.if1
+
+
+    if 0:
+        g = m.addfunction("main")
+        print g,+g,+++g
+        g[1] = m.integer
+        g[2] = m.integer
+        plus = g.addnode(sap.if1.IFPlus)
+        print plus,+plus
+        plus(1) << g[1]
+        plus(2) << g[2]
+        plus[1] = m.integer
+        g(1) << plus[1]
+        g(2) << g[1]
+
+        print m.if1
 
     if 0:
         m.pragmas['C'] = 'IF1 Check'

@@ -62,23 +62,34 @@ enum literal_parser_state_t {
 };
 
 // ----------------------------------------------------------------------
-// Convert a dictionary into pragmas
+// Convert a dictionary into pragmas.
 //
+// Emit the two character pragma values in lexical order for sanity and predictability
+// ----------------------------------------------------------------------
 static PyObject* pragmas(PyObject* dict) {
+  PyObject* sorted = PyList_New(0);
   PyObject* key;
-  PyObject* pragma;
   Py_ssize_t pos = 0;
-  PyObject* result = PyString_FromString("");
-  while (PyDict_Next(dict, &pos, &key, &pragma)) {
+  while (PyDict_Next(dict, &pos, &key, nullptr)) {
     // Only string keys of size 2 are pragmas
     if (!PyString_Check(key) || PyString_GET_SIZE(key) != 2) continue;
+    if (PyList_Append(sorted,key) != 0) { Py_DECREF(sorted); return nullptr; }
+  }
+  if (PyList_Sort(sorted) != 0) { Py_DECREF(sorted); return nullptr; }
+
+  PyObject* result = PyString_FromString("");
+  for(ssize_t i=0; i < PyList_GET_SIZE(sorted); ++i) {
+    PyObject* key /*borrowed*/ = PyList_GET_ITEM(sorted,i);
+    PyObject* pragma /*borrowed*/ = PyDict_GetItem(dict,key);
+    if (!pragma) continue;
+
     PyString_Concat(&result,SPACEPERCENT);
     if (!result) return nullptr;
     PyString_Concat(&result,key);
     if (!result) return nullptr;
     PyString_Concat(&result,EQUAL);
     if (!result) return nullptr;
-    PyObject* rhs /*owned*/ = PyObject_Str(pragma);
+    PyObject* rhs /*borrowed*/ = PyObject_Str(pragma);
     if (!rhs) { Py_DECREF(result); return nullptr; }
     PyString_ConcatAndDel(&result,rhs);
     if (!result) return nullptr;
@@ -1283,6 +1294,32 @@ static PyObject* type_int(PyObject* self) {
   return PyInt_FromLong(label);
 }
 
+static PyObject* type_getattro(PyObject* pySelf,PyObject* attr) {
+  IF1_TypeObject* self = reinterpret_cast<IF1_TypeObject*>(pySelf);
+  if (PyString_Check(attr) && PyString_GET_SIZE(attr) == 2) {
+    PyObject* rhs = PyDict_GetItem(self->pragmas,attr);
+    if (rhs) { Py_INCREF(rhs); return rhs; }
+    PyErr_Clear();
+  }
+  return PyObject_GenericGetAttr(pySelf,attr);
+}
+
+static int type_setattro(PyObject* pySelf,PyObject* attr,PyObject* rhs) {
+  IF1_TypeObject* self = reinterpret_cast<IF1_TypeObject*>(pySelf);
+  if (PyString_Check(attr) && PyString_GET_SIZE(attr) == 2) {
+    if (rhs) {
+      return PyDict_SetItem(self->pragmas,attr,rhs);
+    } else {
+      int status = PyDict_DelItem(self->pragmas,attr);
+      if (status) {
+	PyErr_Format(PyExc_AttributeError,"no such pragma '%s'",PyString_AS_STRING(attr));
+      }
+      return status;
+    }
+  }
+  return PyObject_GenericSetAttr(pySelf,attr,rhs);
+}
+
 static PyObject* type_str(PyObject* pySelf) {
   IF1_TypeObject* self = reinterpret_cast<IF1_TypeObject*>(pySelf);
 
@@ -2091,6 +2128,8 @@ initif1(void)
   IF1_TypeType.tp_repr = type_str;
   IF1_TypeType.tp_members = type_members;
   IF1_TypeType.tp_getset = type_getset;
+  IF1_TypeType.tp_getattro = type_getattro;
+  IF1_TypeType.tp_setattro = type_setattro;
   IF1_TypeType.tp_as_number = &type_number;
   type_number.nb_int = type_int;
   if (PyType_Ready(&IF1_TypeType) < 0) return;
