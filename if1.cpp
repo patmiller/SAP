@@ -619,6 +619,16 @@ static PyObject* inport_lshift(PyObject* pySelf, PyObject* value) {
   else if (PyObject_IsInstance(value,(PyObject*)&IF1_OutPortType)) {
     IF1_OutPortObject* outport = reinterpret_cast<IF1_OutPortObject*>(value);
 
+    // Check to make sure that the source and destination are in the same graph
+    PyObject* dst_home /*owned*/ = PyNumber_Positive((PyObject*)dst);
+    PyObject* src /*borrowed*/ = PyWeakref_GET_OBJECT(outport->weaksrc);
+    PyObject* src_home /*owned*/ = PyNumber_Positive(src);
+    bool ok = (dst_home == src_home);
+    PyErr_Clear(); // Just clear any errors
+    Py_XDECREF(dst_home);
+    Py_XDECREF(src_home);
+    if (!ok) { return PyErr_Format(PyExc_ValueError,"source and destination are not in compatible graphs"); }
+
     PyObject* T /*owned*/ = PyObject_GetAttrString(value,"type");
     if (!T) return nullptr;
 
@@ -884,7 +894,11 @@ static PyObject* node_int(PyObject* pySelf) {
 }
 
 static PyObject* node_positive(PyObject* pySelf) {
-  return PyErr_Format(PyExc_NotImplementedError,"not done with node's graph");
+  IF1_NodeObject* self = reinterpret_cast<IF1_NodeObject*>(pySelf);
+  if (!self->weakparent) { Py_INCREF(Py_None); return Py_None; }
+  PyObject* parent /*borrowed*/ = PyWeakref_GET_OBJECT(self->weakparent);
+  Py_INCREF(parent);
+  return parent;
 }
 
 static PyObject* node_inedge_if1(PyObject* pySelf,PyObject** pif1) {

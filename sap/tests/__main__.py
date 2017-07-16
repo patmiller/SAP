@@ -172,13 +172,17 @@ E 0 2 1 2 4
 if __name__ == '__main__':
     m = sap.if1.Module()
     g = m.addfunction("main")
+    print g,+g,+++g
     g[1] = m.integer
     g[2] = m.integer
     plus = g.addnode(sap.if1.IFPlus)
+    print plus,+plus
     plus(1) << g[1]
     plus(2) << g[2]
     plus[1] = m.integer
     g(1) << plus[1]
+    g(2) << g[1]
+
     print m.if1
 
     if 0:
