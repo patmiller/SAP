@@ -2,6 +2,7 @@
 #include "structmember.h"
 #include "IFX.h"
 #include <map>
+#include <vector>
 #include <string>
 
 PyObject* OPNAMES = nullptr;
@@ -1410,6 +1411,10 @@ static PyObject* type_str(PyObject* pySelf) {
     PyString_ConcatAndDel(&ins,outs);
     return ins;
   }
+  case IF_Wild: {
+    return PyString_FromString("wild");
+  }
+    
   }
   return PyErr_Format(PyExc_NotImplementedError,"Code %ld",self->code);
 }
@@ -1558,6 +1563,24 @@ static PyGetSetDef type_getset[] = {
 */
 
 
+static IF1_TypeObject* wild_type(PyObject* module) {
+  PyObject* result /*owned*/ = PyType_GenericNew(&IF1_TypeType,nullptr,nullptr);
+  if (!result) return nullptr;
+  IF1_TypeObject* T = reinterpret_cast<IF1_TypeObject*>(result);
+  T->weakmodule = nullptr;
+  T->weak1 = nullptr;
+  T->weak2 = nullptr;
+  T->pragmas = PyDict_New();
+  if (!T->pragmas) { Py_DECREF(T); return nullptr; }
+
+  T->weakmodule /*borrowed*/ = PyWeakref_NewRef(module,nullptr);
+  if (!T->weakmodule) { Py_DECREF(T); return nullptr;}
+
+  T->code = IF_Wild;
+
+  return T;
+}
+
 static PyObject* rawtype(PyObject* module,
                          unsigned long code,
                          unsigned long aux,
@@ -1583,17 +1606,9 @@ static PyObject* rawtype(PyObject* module,
     return p;
   }
 
-  PyObject* result /*owned*/ = PyType_GenericNew(&IF1_TypeType,nullptr,nullptr);
-  if (!result) return nullptr;
-  IF1_TypeObject* T = reinterpret_cast<IF1_TypeObject*>(result);
-  T->weakmodule = nullptr;
-  T->weak1 = nullptr;
-  T->weak2 = nullptr;
-  T->pragmas = PyDict_New();
-  if (!T->pragmas) { Py_DECREF(T); return nullptr; }
-
-  T->weakmodule /*borrowed*/ = PyWeakref_NewRef(module,nullptr);
-  if (!T->weakmodule) { Py_DECREF(T); return nullptr;}
+  IF1_TypeObject* T = wild_type(module);
+  if (!T) return nullptr;
+  PyObject* result = reinterpret_cast<PyObject*>(T);
   T->code = code;
   T->aux = aux;
   T->weak1 = strong1?PyWeakref_NewRef(strong1,nullptr):nullptr;
@@ -1629,7 +1644,167 @@ static PyObject* rawtype(IF1_ModuleObject* module,
                  nullptr);
 }
 
+static void parse_if1_line(PyObject* line,std::vector<long>& longs,std::vector<std::string>& strings) {
+  PyObject* linesplit /*owned*/ = PyObject_CallMethod(line,(char*)"split",(char*)"");
+  if (!linesplit) return;
+  for(ssize_t i=0; i < PyList_GET_SIZE(linesplit); ++i) {
+    PyObject* token /*borrowed*/ = PyList_GET_ITEM(linesplit,i);
+    PyObject* asInt /*owned*/ = PyNumber_Int(token);
+    if (asInt) {
+      long ival = PyInt_AsLong(asInt);
+      Py_DECREF(asInt);
+      longs.push_back(ival);
+    } else {
+      PyErr_Clear();
+      strings.push_back(std::string(PyString_AS_STRING(token),PyString_GET_SIZE(token)));
+    }
+  }
+}
+
+static void apply_pragmas(PyObject* pragmas,std::vector<std::string>& strings) {
+  for(std::vector<std::string>::iterator p=strings.begin(),end=strings.end(); p != end; ++p) {
+    std::string& token = *p;
+    // Does it look like a pragma? %xx=...?
+    if (token.size() < 5 || token[0] != '%' || token[3] != '=') continue;
+    PyObject* key /*owned*/ = PyString_FromStringAndSize(token.c_str()+1,2);
+    if (!key) continue;
+    PyObject* pragma /*owned*/ = PyString_FromString(token.c_str()+4);
+    if (!pragma) { Py_DECREF(key); continue; }
+
+    PyObject* ipragma /*owned*/ = PyNumber_Int(pragma);
+
+    if (ipragma) {
+      PyDict_SetItem(pragmas,key,ipragma);
+      Py_DECREF(ipragma);
+    } else {
+      PyDict_SetItem(pragmas,key,pragma);
+    }
+    Py_DECREF(key);
+    Py_DECREF(pragma);
+  }
+}
+
+
+static int module_read_types(IF1_ModuleObject* self, PyObject* split) {
+  // Read through the type lines (start with T) and find the largest type number
+  // Pick off the lines we care about at the same time
+  ssize_t ntypes = 0;
+  std::vector<PyObject*> Tlines;  // All pointers are borrowed
+  for(ssize_t i=0;i<PyList_GET_SIZE(split);++i) {
+    PyObject* line /*borrowed*/ = PyList_GET_ITEM(split,i);
+    std::vector<long> longs;
+    std::vector<std::string> strings;
+    parse_if1_line(line,longs,strings);
+    if (longs.size() > 1 && strings.size() > 0 && strings[0] == "T") {
+      Tlines.push_back(line);
+      if (longs[0] > ntypes)  ntypes = longs[0];
+    }
+  }
+
+  // Make an array full of wild types that we will fill in
+  PyObject* types = PyList_New(ntypes);
+  for(ssize_t i=0;i<ntypes;++i) {
+    IF1_TypeObject* TT /*owned*/ = wild_type((PyObject*)self);
+    PyObject* T = reinterpret_cast<PyObject*>(TT);
+    if (!T) { Py_DECREF(types); return -1; }
+    PyList_SET_ITEM(types,i,T);
+  }
+  
+  // Fill in the actual info
+  for(std::vector<PyObject*>::iterator p=Tlines.begin(), end=Tlines.end(); p != end; ++p) {
+    PyObject* line /*borrowed*/ = *p;
+    std::vector<long> longs;
+    std::vector<std::string> strings;
+    parse_if1_line(line,longs,strings);
+
+    IF1_TypeObject* T /*borrowed*/ = reinterpret_cast<IF1_TypeObject*>(PyList_GET_ITEM(types,longs[0]-1));
+
+    switch(longs[1]) {
+    case IF_Wild:
+      if (longs.size() != 2) { Py_DECREF(types); PyErr_Format(PyExc_ValueError,"type %ld is malformed",longs[0]); return -1; }
+      break;
+
+    case IF_Array:
+    case IF_Multiple:
+    case IF_Record:
+    case IF_Stream:
+    case IF_Union:
+      if (longs.size() != 3 ) { Py_DECREF(types); PyErr_Format(PyExc_ValueError,"type %ld is malformed",longs[0]); return -1; }
+      if ( longs[2] <= 0 || longs[2] > ntypes ) {
+	Py_DECREF(types);
+	PyErr_Format(PyExc_ValueError,"type %ld references out-of-bounds type %ld",longs[0],longs[2]);
+	return -1;
+      }
+
+      T->code = longs[1];
+      T->weak1 = PyWeakref_NewRef(PyList_GET_ITEM(types,longs[2]-1),nullptr);
+      T->weak2 = nullptr;
+      break;
+
+    case IF_Basic: 
+      if (longs.size() != 3) { Py_DECREF(types); PyErr_Format(PyExc_ValueError,"type %ld is malformed",longs[0]); return -1; }
+      T->code = IF_Basic;
+      if (longs[2] < IF_Boolean || longs[2] > IF_WildBasic) {
+	Py_DECREF(types);
+	PyErr_Format(PyExc_ValueError,"basic type %ld is malformed (tag %ld)",longs[0],longs[2]);
+	return -1;
+      }
+      T->aux = longs[2];
+      T->weak1 = nullptr;
+      T->weak2 = nullptr;
+      break;
+
+    case IF_Field:
+    case IF_Function:
+    case IF_Tag:
+    case IF_Tuple: {
+      if (longs.size() != 4) { Py_DECREF(types); PyErr_Format(PyExc_ValueError,"type %ld is malformed",longs[0]); return -1; }
+
+      if ( longs[2] < 0 || longs[2] > ntypes ) {
+	Py_DECREF(types);
+	PyErr_Format(PyExc_ValueError,"type %ld references out-of-bounds type %ld",longs[0],longs[2]);
+	return -1;
+      }
+
+      if ( longs[3] < 0 || longs[3] > ntypes ) {
+	Py_DECREF(types);
+	PyErr_Format(PyExc_ValueError,"type %ld references out-of-bounds type %ld",longs[0],longs[3]);
+	return -1;
+      }
+
+      // Functions can have a null set of inputs (parameter1), but cannot have null outputs (parameter2)
+      // The other chain types can have a null link (parameter2), but not a null field (parameter1)
+      long critical = (longs[1] == IF_Function)?(3):(2);
+      if (longs[critical] == 0) {
+	Py_DECREF(types);
+	PyErr_Format(PyExc_ValueError,"type %ld references invalid null link",longs[0]);
+	return -1;
+      }
+
+      T->code = longs[1];
+      T->weak1 = longs[2]?PyWeakref_NewRef(PyList_GET_ITEM(types,longs[2]-1),nullptr):nullptr;
+      T->weak2 = longs[3]?PyWeakref_NewRef(PyList_GET_ITEM(types,longs[3]-1),nullptr):nullptr;
+    } break;
+
+    default:
+      PyErr_Format(PyExc_ValueError,"Unknown type format code %ld for type %ld",longs[1],longs[0]);
+      Py_DECREF(types);
+      return -1;
+    }
+
+    // Apply any pragmas
+    apply_pragmas(T->pragmas,strings);
+
+  }
+  self->types = types;
+  return 0;
+}
+
 static int module_init(PyObject* pySelf, PyObject* args, PyObject* kwargs) {
+  PyObject* source = nullptr;
+  static char* keywords[] = {(char*)"source",nullptr};
+  if (!PyArg_ParseTupleAndKeywords(args,kwargs,"|O!",keywords,&PyString_Type,&source)) return -1;
+
   IF1_ModuleObject* self = reinterpret_cast<IF1_ModuleObject*>(pySelf);
   self->types = nullptr;
   self->pragmas = nullptr;
@@ -1646,41 +1821,47 @@ static int module_init(PyObject* pySelf, PyObject* args, PyObject* kwargs) {
   self->functions = PyList_New(0);
   if (!self->functions) return -1;
 
-  PyObject* boolean /*owned*/ = rawtype(pySelf,IF_Basic,IF_Boolean,nullptr,nullptr,nullptr,"boolean");
-  if (!boolean) return -1;
-  Py_DECREF(boolean);
+  if (source) {
+    PyObject* split /*owned*/ = PyObject_CallMethod(source,(char*)"split",(char*)"s","\n");
+    if (!split) return -1;
+    if (module_read_types(self,split) != 0) { Py_DECREF(split); return -1; }
+  } else {
+    PyObject* boolean /*owned*/ = rawtype(pySelf,IF_Basic,IF_Boolean,nullptr,nullptr,nullptr,"boolean");
+    if (!boolean) return -1;
+    Py_DECREF(boolean);
 
-  PyObject* character /*owned*/ = rawtype(pySelf,IF_Basic,IF_Character,nullptr,nullptr,nullptr,"character");
-  if (!character) return -1;
-  Py_DECREF(character);
+    PyObject* character /*owned*/ = rawtype(pySelf,IF_Basic,IF_Character,nullptr,nullptr,nullptr,"character");
+    if (!character) return -1;
+    Py_DECREF(character);
 
-  PyObject* doublereal /*owned*/ = rawtype(pySelf,IF_Basic,IF_DoubleReal,nullptr,nullptr,nullptr,"doublereal");
-  if (!doublereal) return -1;
-  Py_DECREF(doublereal);
+    PyObject* doublereal /*owned*/ = rawtype(pySelf,IF_Basic,IF_DoubleReal,nullptr,nullptr,nullptr,"doublereal");
+    if (!doublereal) return -1;
+    Py_DECREF(doublereal);
 
-  PyObject* integer /*owned*/ = rawtype(pySelf,IF_Basic,IF_Integer,nullptr,nullptr,nullptr,"integer");
-  if (!integer) return -1;
-  Py_DECREF(integer);
+    PyObject* integer /*owned*/ = rawtype(pySelf,IF_Basic,IF_Integer,nullptr,nullptr,nullptr,"integer");
+    if (!integer) return -1;
+    Py_DECREF(integer);
 
-  PyObject* null /*owned*/ = rawtype(pySelf,IF_Basic,IF_Null,nullptr,nullptr,nullptr,"null");
-  if (!null) return -1;
-  Py_DECREF(null);
+    PyObject* null /*owned*/ = rawtype(pySelf,IF_Basic,IF_Null,nullptr,nullptr,nullptr,"null");
+    if (!null) return -1;
+    Py_DECREF(null);
 
-  PyObject* real /*owned*/ = rawtype(pySelf,IF_Basic,IF_Real,nullptr,nullptr,nullptr,"real");
-  if (!real) return -1;
-  Py_DECREF(real);
+    PyObject* real /*owned*/ = rawtype(pySelf,IF_Basic,IF_Real,nullptr,nullptr,nullptr,"real");
+    if (!real) return -1;
+    Py_DECREF(real);
 
-  PyObject* wildbasic /*owned*/ = rawtype(pySelf,IF_Basic,IF_WildBasic,nullptr,nullptr,nullptr,"wildbasic");
-  if (!wildbasic) return -1;
-  Py_DECREF(wildbasic);
+    PyObject* wildbasic /*owned*/ = rawtype(pySelf,IF_Basic,IF_WildBasic,nullptr,nullptr,nullptr,"wildbasic");
+    if (!wildbasic) return -1;
+    Py_DECREF(wildbasic);
 
-  PyObject* wild /*owned*/ = rawtype(pySelf,IF_Wild,0,nullptr,nullptr,nullptr,"wild");
-  if (!wild) return -1;
-  Py_DECREF(wild);
+    PyObject* wild /*owned*/ = rawtype(pySelf,IF_Wild,0,nullptr,nullptr,nullptr,"wild");
+    if (!wild) return -1;
+    Py_DECREF(wild);
 
-  PyObject* string /*owned*/ = rawtype(pySelf,IF_Array,0,character,nullptr,nullptr,"string");
-  if (!string) return -1;
-  Py_DECREF(string);
+    PyObject* string /*owned*/ = rawtype(pySelf,IF_Array,0,character,nullptr,nullptr,"string");
+    if (!string) return -1;
+    Py_DECREF(string);
+  }
 
   for(int i=0;i<PyList_GET_SIZE(self->types);++i) {
     PyObject* p /*borrowed*/ = PyList_GET_ITEM(self->types,i);

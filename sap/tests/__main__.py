@@ -237,16 +237,77 @@ T 9 0 2 %na=string
         self.assertEqual(m.integer.if1,'T 4 1 3 %aa=1 %cc=3 %mm=10 %na=integer %xx=20')
         return
 
+    def test_readif1(self):
+        sample = '''T 1 1 0 %fo=bar %na=bool %sl=10
+T 2 1 3 %na=int
+T 3 0 2
+T 4 10
+T 6 1 4
+T 7 8 2 0
+T 8 8 2 7
+T 9 3 8 7
+T 10 3 0 7
+'''
+        # Order should not be important.  We try a random shuffle of the lines to see if we get the same info
+        import random
+        scramble = sample.split('\n')
+        random.shuffle(scramble)
+        scramble = '\n'.join(scramble)
+        for example in (sample,scramble):
+            m = sap.if1.Module(example)
+            # Normal types will be missing
+            with self.assertRaises(AttributeError):
+                m.integer
+
+            # The Make sure the types look right
+            self.assertIs(m.bool,m.types[0])
+            self.assertEqual(m.bool.code,sap.if1.IF_Basic)
+            self.assertEqual(m.bool.aux,sap.if1.IF_Boolean)
+
+            self.assertIs(m.int,m.types[1])
+            self.assertEqual(m.int.code,sap.if1.IF_Basic)
+            self.assertEqual(m.int.aux,sap.if1.IF_Integer)
+
+            self.assertEqual(m.types[2].code,sap.if1.IF_Array)
+            self.assertIs(m.types[2].parameter1,m.int)
+
+            self.assertEqual(m.types[3].code,sap.if1.IF_Wild)
+            self.assertIs(m.types[3].parameter1,None)
+
+            # A skipped type (type 5 is missing above) shows up as a pure wild
+            self.assertEqual(m.types[4].code,sap.if1.IF_Wild)
+            self.assertIs(m.types[4].parameter1,None)
+
+            self.assertEqual(m.types[5].code, sap.if1.IF_Basic)
+
+            self.assertEqual(m.types[6].code, sap.if1.IF_Tuple)
+            self.assertIs(m.types[6].parameter1, m.int)
+            self.assertIs(m.types[6].parameter2, None)
+
+            self.assertEqual(m.types[7].code, sap.if1.IF_Tuple)
+            self.assertIs(m.types[7].parameter1, m.int)
+            self.assertIs(m.types[7].parameter2, m.types[6])
+
+            self.assertEqual(m.types[8].code, sap.if1.IF_Function)
+            self.assertIs(m.types[8].parameter1, m.types[7])
+            self.assertIs(m.types[8].parameter2, m.types[6])
+
+            self.assertEqual(m.types[9].code, sap.if1.IF_Function)
+            self.assertIs(m.types[9].parameter1, None)
+            self.assertIs(m.types[9].parameter2, m.types[6])
+
+            # and check some pragmas
+            self.assertIsInstance(m.bool.na,str)
+            self.assertIs(m.bool.na,m.bool.name)
+            self.assertIsInstance(m.bool.fo,str)
+            self.assertIsInstance(m.bool.sl,int)
+
+            # If we remove the "extra" wild, the if1 should look like the sample
+            self.assertEqual(m.if1.replace('T 5 10\n',''),sample)
+
+        return
+
 if __name__ == '__main__':
-    m = sap.if1.Module()
-
-    g = m.addfunction("main")
-    g(1) << 3
-
-    #g.sf = "foo.py"
-
-    print m.if1
-
 
     if 0:
         g = m.addfunction("main")
