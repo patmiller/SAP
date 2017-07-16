@@ -307,20 +307,66 @@ T 10 3 0 7
 
         return
 
+    def test_nodepragmas(self):
+        m = sap.if1.Module()
+        g = m.addfunction("main")
+        g.sl = 100
+        g[1] = m.integer
+        g[2] = m.integer
+        self.assertIn('sl',g.pragmas)
+        self.assertEqual(g.sl,100)
+
+        plus = g.addnode(sap.if1.IFPlus)
+        plus.sl = 111
+        plus.fn = 'foo.py'
+        plus(1) << g[1]
+        plus(2) << 100
+        plus[1] = m.integer
+        self.assertIn('fn',plus.pragmas)
+        self.assertEqual(plus.fn,'foo.py')
+        self.assertIn('sl',plus.pragmas)
+        self.assertEqual(plus.sl,111)
+
+        minus = g.addnode(sap.if1.IFMinus)
+        minus[1] = m.integer
+        minus(1) << plus[1]
+        minus(2) << g[2]
+
+        g(1) << plus[1]
+        g(2) << g[1]
+        g(3) << g[2]
+        g(4) << minus[1]
+
+        self.assertIn('X 14 "main" %sl=100',m.if1)
+        self.assertIn('N 1 141 %fn=foo.py %sl=111',m.if1)
+        return
+
 if __name__ == '__main__':
 
     if 0:
+        m = sap.if1.Module()
         g = m.addfunction("main")
+        g.sl = 100
         print g,+g,+++g
         g[1] = m.integer
         g[2] = m.integer
+
         plus = g.addnode(sap.if1.IFPlus)
-        print plus,+plus
+        plus.sl = 111
+        plus.fn = 'foo.py'
         plus(1) << g[1]
-        plus(2) << g[2]
+        plus(2) << 100
         plus[1] = m.integer
+
+        minus = g.addnode(sap.if1.IFMinus)
+        minus[1] = m.integer
+        minus(1) << plus[1]
+        minus(2) << g[2]
+
         g(1) << plus[1]
         g(2) << g[1]
+        g(3) << g[2]
+        g(4) << minus[1]
 
         print m.if1
 

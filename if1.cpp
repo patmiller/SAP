@@ -328,6 +328,8 @@ typedef struct {
   
   PyObject* children;
 
+  PyObject* pragmas;
+
   std::map<long,Edge>* edges;
   std::map<long,PortInfo>* outputs;
 
@@ -340,7 +342,8 @@ PySequenceMethods node_sequence;
 
 static PyMemberDef node_members[] = {
   {(char*)"opcode",T_LONG,offsetof(IF1_NodeObject,opcode),0,(char*)"op code: IFPlus, IFMinus, ..."},
-  {(char*)"children",T_OBJECT_EX,offsetof(IF1_NodeObject,children),READONLY,(char*)"children of componds (or exception)"},
+  {(char*)"children",T_OBJECT_EX,offsetof(IF1_NodeObject,children),READONLY,(char*)"children of compounds"},
+  {(char*)"pragmas",T_OBJECT_EX,offsetof(IF1_NodeObject,pragmas),READONLY,(char*)"pragma dictionary"},
   {nullptr}
 };
 
@@ -855,6 +858,9 @@ static int node_init(PyObject* pySelf, PyObject* module, PyObject* parent, long 
   self->children = PyList_New(0);
   if (!self->children) return -1;
 
+  self->pragmas = PyDict_New();
+  if (!self->pragmas) return -1;
+
   self->edges = new std::map<long,Edge>;
   self->outputs = new std::map<long,PortInfo>;
 
@@ -869,11 +875,42 @@ static void node_dealloc(PyObject* pySelf) {
   Py_XDECREF(self->weakmodule);
   Py_XDECREF(self->weakparent);
   Py_XDECREF(self->children);
+  Py_XDECREF(self->pragmas);
 
   delete self->edges;
   delete self->outputs;
 
   Py_TYPE(pySelf)->tp_free(pySelf);
+}
+
+#if 0
+}
+
+#endif
+
+static PyObject* node_getattro(PyObject* pySelf, PyObject* attr) {
+  IF1_NodeObject* self = reinterpret_cast<IF1_NodeObject*>(pySelf);
+  if (PyString_Check(attr) && PyString_GET_SIZE(attr) == 2) {
+    PyObject* rhs = PyDict_GetItem(self->pragmas,attr);
+    if (rhs) { Py_INCREF(rhs); return rhs; }
+    PyErr_Clear();
+  }
+  return PyObject_GenericGetAttr(pySelf,attr);
+}
+static int node_setattro(PyObject* pySelf, PyObject* attr, PyObject* rhs) {
+  IF1_NodeObject* self = reinterpret_cast<IF1_NodeObject*>(pySelf);
+  if (PyString_Check(attr) && PyString_GET_SIZE(attr) == 2) {
+    if (rhs) {
+      return PyDict_SetItem(self->pragmas,attr,rhs);
+    } else {
+      int status = PyDict_DelItem(self->pragmas,attr);
+      if (status) {
+	PyErr_Format(PyExc_AttributeError,"no such pragma '%s'",PyString_AS_STRING(attr));
+      }
+      return status;
+    }
+  }
+  return PyObject_GenericSetAttr(pySelf,attr,rhs);
 }
 
 static PyObject* node_str(PyObject* pySelf) {
@@ -982,7 +1019,19 @@ static PyObject* node_get_if1(PyObject* pySelf,void*) {
   Py_DECREF(pylabel);
   if (label < 0 && PyErr_Occurred()) return nullptr;
 
-  PyObject* if1 /*owned*/ = PyString_FromFormat("N %ld %ld\n",label,self->opcode);
+  PyObject* if1 /*owned*/ = PyString_FromFormat("N %ld %ld",label,self->opcode);
+
+  // Add in the pragmas
+  PyObject* prags /*owned*/ = pragmas(self->pragmas);
+  if (!prags) {
+    Py_DECREF(if1);
+    return nullptr;
+  }
+  PyString_ConcatAndDel(&if1,prags);
+  if (!if1) return nullptr;
+  PyString_Concat(&if1,NEWLINE);
+  if (!if1) return nullptr;
+
   if (!if1) return nullptr;
   return node_inedge_if1(pySelf,&if1);
 }
@@ -1204,6 +1253,16 @@ static PyObject* graph_get_if1(PyObject* pySelf,void*)  {
     PyString_Concat(&if1,DQUOTE);
     if (!if1) return nullptr;
   }
+
+  // Add in the pragmas
+  PyObject* prags /*owned*/ = pragmas(self->node.pragmas);
+  if (!prags) {
+    Py_DECREF(if1);
+    return nullptr;
+  }
+  PyString_ConcatAndDel(&if1,prags);
+  if (!if1) return nullptr;
+
   PyString_Concat(&if1,NEWLINE);
   if (!if1) return nullptr;
 
@@ -2263,6 +2322,8 @@ initif1(void)
   IF1_NodeType.tp_flags = Py_TPFLAGS_DEFAULT;
   IF1_NodeType.tp_doc = node_doc;
   IF1_NodeType.tp_dealloc = node_dealloc;
+  IF1_NodeType.tp_getattro = node_getattro;
+  IF1_NodeType.tp_setattro = node_setattro;
   IF1_NodeType.tp_members = node_members;
   IF1_NodeType.tp_getset = node_getset;
   IF1_NodeType.tp_call = node_inport;
