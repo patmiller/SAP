@@ -88,9 +88,43 @@ T 9 0 2 %na=string
 T 10 8 4 0
 T 11 3 0 10
 X 11 "main"
-L      0 1 4 "3"
+L     0 1 4 "3"
 ''')
         return
+
+    def test_simple(self):
+        m = sap.if1.Module()
+
+        g = m.addfunction("main")
+        g[1] = m.integer
+        g[2] = m.integer
+
+        plus = g.addnode(sap.if1.IFPlus)
+        plus(1) << g[1]
+        plus(2) << g[2]
+        plus[1] = m.integer
+
+        g(1) << plus[1]
+        self.assertEqual(m.if1,'''T 1 1 0 %na=boolean
+T 2 1 1 %na=character
+T 3 1 2 %na=doublereal
+T 4 1 3 %na=integer
+T 5 1 4 %na=null
+T 6 1 5 %na=real
+T 7 1 6 %na=wildbasic
+T 8 10 %na=wild
+T 9 0 2 %na=string
+T 10 8 4 0
+T 11 8 4 10
+T 12 3 11 10
+X 12 "main"
+E 1 1 0 1 4
+N 1 141
+E 0 1 1 1 4
+E 0 2 1 2 4
+''')
+        return
+
         
     def test_fail(self):
         m = sap.if1.Module()
@@ -136,32 +170,29 @@ L      0 1 4 "3"
         return
 
 if __name__ == '__main__':
+    m = sap.if1.Module()
+    g = m.addfunction("main")
+    g[1] = m.integer
+    g[2] = m.integer
+    plus = g.addnode(sap.if1.IFPlus)
+    plus(1) << g[1]
+    plus(2) << g[2]
+    plus[1] = m.integer
+    g(1) << plus[1]
+    print m.if1
+
     if 0:
-        m = sap.if1.Module()
-        g = m.addfunction("main")
-
-        print g
-        print g.name
-        print g.opcode
-        print g.type
-        g(1) << "3"
-        print g.type
-        g(2) << "7.5"
-        print g.type
-        g(2) << None
-        print g.if1
-        print m.if1
-
         m.pragmas['C'] = 'IF1 Check'
         m.pragmas['D'] = 'Dataflow ordered'
         m.pragmas['F'] = 'Python Frontend'
+        open('plus12.if1','w').write(m.if1)
+        import os
+        print os.getcwd();
+        os.system('$HOME/local/bin/sisalc plus12.if1')
+        os.system('echo 1 2 | ./s.out')
 
-        print
-        print m.if1
-        import os; print os.getcwd()
-        open('../../three.if1','w').write(m.if1)
-
-    import doctest
-    doctest.testmod()
-    unittest.main()
+    if 1:
+        import doctest
+        doctest.testmod()
+        unittest.main()
     
