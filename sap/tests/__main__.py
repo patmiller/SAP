@@ -169,8 +169,41 @@ E 0 2 1 2 4
                     self.assertIs(T,expected)
         return
 
+    def test_typenames(self):
+        m = sap.if1.Module()
+
+        # Get a type name
+        self.assertEqual(m.integer.name,'integer')
+
+        # Set a type name
+        m.integer.name = 'foobar'
+        self.assertEqual(m.integer.name,'foobar')
+
+        # A couple ways to delete a type name
+        m.real.name = None
+        del m.boolean.name
+
+        self.assertEqual(m.if1,'''T 1 1 0
+T 2 1 1 %na=character
+T 3 1 2 %na=doublereal
+T 4 1 3 %na=foobar
+T 5 1 4 %na=null
+T 6 1 5
+T 7 1 6 %na=wildbasic
+T 8 10 %na=wild
+T 9 0 2 %na=string
+''')
+        return
+        
+
 if __name__ == '__main__':
     m = sap.if1.Module()
+
+    print m.integer.name
+    m.integer.name = 'foobar'
+    m.real.name = None
+    del m.boolean.name
+
     g = m.addfunction("main")
     print g,+g,+++g
     g[1] = m.integer

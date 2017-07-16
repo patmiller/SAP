@@ -18,7 +18,8 @@ PyObject* RPAREN = nullptr; // )
 PyObject* SPACE = nullptr;
 PyObject* DQUOTE = nullptr; // "
 PyObject* NEWLINE = nullptr;
-
+PyObject* SPACEPERCENT = nullptr; // ' %'
+PyObject* EQUAL = nullptr; // =
 
 enum literal_parser_state_t {
   ERROR = 0,
@@ -59,6 +60,31 @@ enum literal_parser_state_t {
   REAL_LITERAL = -6,
   STRING_LITERAL = -7
 };
+
+// ----------------------------------------------------------------------
+// Convert a dictionary into pragmas
+//
+static PyObject* pragmas(PyObject* dict) {
+  PyObject* key;
+  PyObject* pragma;
+  Py_ssize_t pos = 0;
+  PyObject* result = PyString_FromString("");
+  while (PyDict_Next(dict, &pos, &key, &pragma)) {
+    // Only string keys of size 2 are pragmas
+    if (!PyString_Check(key) || PyString_GET_SIZE(key) != 2) continue;
+    PyString_Concat(&result,SPACEPERCENT);
+    if (!result) return nullptr;
+    PyString_Concat(&result,key);
+    if (!result) return nullptr;
+    PyString_Concat(&result,EQUAL);
+    if (!result) return nullptr;
+    PyObject* rhs /*owned*/ = PyObject_Str(pragma);
+    if (!rhs) { Py_DECREF(result); return nullptr; }
+    PyString_ConcatAndDel(&result,rhs);
+    if (!result) return nullptr;
+  }
+  return result;
+}
 
 bool initialize_literal_parser_table(literal_parser_state_t table[]) {
   // Initialize all entries to ERROR
@@ -440,7 +466,7 @@ typedef struct {
   unsigned long aux;
   PyObject* weak1;
   PyObject* weak2;
-  PyObject* name;
+  PyObject* pragmas;
 
   // Weak reference slot
   PyObject* weak;
@@ -448,7 +474,7 @@ typedef struct {
 
 static PyMemberDef type_members[] = {
   {(char*)"code",T_LONG,offsetof(IF1_TypeObject,code),READONLY,(char*)"type code: IF_Array, IF_Basic..."},
-  {(char*)"name",T_OBJECT,offsetof(IF1_TypeObject,name),0,(char*)"type name or None"},
+  {(char*)"pragmas",T_OBJECT,offsetof(IF1_TypeObject,pragmas),READONLY,(char*)"dictionary of pragma info"},
   {nullptr}  /* Sentinel */
 };
 
@@ -1232,7 +1258,7 @@ static void type_dealloc(PyObject* pySelf) {
   Py_XDECREF(self->weakmodule);
   Py_XDECREF(self->weak1);
   Py_XDECREF(self->weak2);
-  Py_XDECREF(self->name);
+  Py_XDECREF(self->pragmas);
   Py_TYPE(pySelf)->tp_free(pySelf);
 }
 
@@ -1263,9 +1289,10 @@ static PyObject* type_str(PyObject* pySelf) {
   static const char* flavor[] = {"array","basic","field","function","multiple","record","stream","tag","tuple","union"};
 
   // If we named the type, just use the name (unless it is a tuple, field, or tag)
-  if (self->name && self->code != IF_Tuple && self->code != IF_Field && self->code != IF_Tag) {
-    Py_INCREF(self->name); 
-    return self->name;
+  PyObject* name /*borrowed*/= PyDict_GetItemString(self->pragmas,"na");
+  if (name && self->code != IF_Tuple && self->code != IF_Field && self->code != IF_Tag) {
+    Py_INCREF(name); 
+    return name;
   }
 
   switch(self->code) {
@@ -1302,8 +1329,9 @@ static PyObject* type_str(PyObject* pySelf) {
     if (!result) return nullptr;
 
     for(;self;) {
-      if (self->name) {
-        PyObject* fname = PyObject_Str(self->name);
+      PyObject* name /*borrowed*/= PyDict_GetItemString(self->pragmas,"na");
+      if (name) {
+        PyObject* fname = PyObject_Str(name);
         if (!fname) { Py_DECREF(result); return nullptr; }
         PyString_ConcatAndDel(&result,fname);
         if (!result) return nullptr;
@@ -1354,18 +1382,19 @@ static PyObject* type_get_if1(PyObject* pySelf,void*) {
   long label = type_label(pySelf);
   if (label < 0) return nullptr;
 
+  PyObject* result /*owned*/ = nullptr;
   switch(self->code) {
     // Wild is a special case
   case IF_Wild:
-    if (self->name && PyString_Check(self->name))
-      return PyString_FromFormat("T %ld %ld %%na=%s",label,self->code,PyString_AS_STRING(self->name));
-    return PyString_FromFormat("T %ld %ld",label,self->code);
+    result = PyString_FromFormat("T %ld %ld",label,self->code);
+    if (!result) return nullptr;
+    break;
 
     // Basic uses the aux, not the weak fields
   case IF_Basic:
-    if (self->name && PyString_Check(self->name)) 
-      return PyString_FromFormat("T %ld %ld %ld %%na=%s",label,self->code,self->aux,PyString_AS_STRING(self->name));
-    return PyString_FromFormat("T %ld %ld %ld",label,self->code,self->aux);
+    result = PyString_FromFormat("T %ld %ld %ld",label,self->code,self->aux);
+    if (!result) return nullptr;
+    break;
 
     // One parameter case
   case IF_Array:
@@ -1377,9 +1406,9 @@ static PyObject* type_get_if1(PyObject* pySelf,void*) {
     if (one == Py_None) return PyErr_Format(PyExc_RuntimeError,"disconnected type");
     long one_label = type_label(one);
     if ( one_label < 0 ) return nullptr;
-    if (self->name && PyString_Check(self->name)) 
-      return PyString_FromFormat("T %ld %ld %ld %%na=%s",label,self->code,one_label,PyString_AS_STRING(self->name));
-    return PyString_FromFormat("T %ld %ld %ld",label,self->code,one_label);
+    result = PyString_FromFormat("T %ld %ld %ld",label,self->code,one_label);
+    if (!result) return nullptr;
+    break;
   }
 
     // Two parameter case for the rest
@@ -1400,12 +1429,16 @@ static PyObject* type_get_if1(PyObject* pySelf,void*) {
       if ( two_label < 0 ) return nullptr;
     }
 
-    if (self->name && PyString_Check(self->name)) 
-      return PyString_FromFormat("T %ld %ld %ld %ld %%na=%s",label,self->code,one_label,two_label,PyString_AS_STRING(self->name));
-    return PyString_FromFormat("T %ld %ld %ld %ld",label,self->code,one_label,two_label);
+    result = PyString_FromFormat("T %ld %ld %ld %ld",label,self->code,one_label,two_label);
+    if (!result) return nullptr;
   }
   }
-  return PyErr_Format(PyExc_NotImplementedError,"finish get if1 for %ld\n",self->code);
+
+  PyObject* prags = pragmas(self->pragmas);
+  if (!prags) { Py_DECREF(result); return nullptr; }
+  PyString_ConcatAndDel(&result,prags);
+
+  return result;
 
 }
 
@@ -1448,7 +1481,27 @@ static PyObject* type_get_label(PyObject* self,void*) {
   return type_int(self);
 }
 
+static PyObject* type_get_name(PyObject* pySelf,void*) {
+  IF1_TypeObject* self = reinterpret_cast<IF1_TypeObject*>(pySelf);
+  PyObject* name /*borrowed*/ = PyDict_GetItemString(self->pragmas,"na");
+  if (!name) name = Py_None;
+  Py_INCREF(name);
+  return name;
+}
+
+static int type_set_name(PyObject* pySelf,PyObject* rhs,void*) {
+  IF1_TypeObject* self = reinterpret_cast<IF1_TypeObject*>(pySelf);
+  if (rhs == nullptr || rhs == Py_None) {
+    PyDict_DelItemString(self->pragmas,"na");
+    PyErr_Clear();
+    return 0;
+  }
+  return PyDict_SetItemString(self->pragmas,"na",rhs);
+}
+
+
 static PyGetSetDef type_getset[] = {
+  {(char*)"name",type_get_name,type_set_name,(char*)"name (maps to the %na pragma value)",nullptr},
   {(char*)"aux",type_get_aux,nullptr,(char*)"aux code (basic only)",nullptr},
   {(char*)"parameter1",type_get_parameter1,nullptr,(char*)"parameter1 type (if any)",nullptr},
   {(char*)"parameter2",type_get_parameter2,nullptr,(char*)"parameter2 type (if any)",nullptr},
@@ -1499,7 +1552,8 @@ static PyObject* rawtype(PyObject* module,
   T->weakmodule = nullptr;
   T->weak1 = nullptr;
   T->weak2 = nullptr;
-  T->name = nullptr;
+  T->pragmas = PyDict_New();
+  if (!T->pragmas) { Py_DECREF(T); return nullptr; }
 
   T->weakmodule /*borrowed*/ = PyWeakref_NewRef(module,nullptr);
   if (!T->weakmodule) { Py_DECREF(T); return nullptr;}
@@ -1510,12 +1564,12 @@ static PyObject* rawtype(PyObject* module,
   T->weak2 = strong2?PyWeakref_NewRef(strong2,nullptr):nullptr;
   if (strong2 && !T->weak2) { Py_DECREF(T); return nullptr;}
   if (name) {
-    Py_INCREF(T->name = name);
+    PyDict_SetItemString(T->pragmas,"na",name);
   } else if (cname) {
-    T->name = PyString_FromString(cname);
-    if (!T->name) { Py_DECREF(T); return nullptr;}
-  } else {
-    T->name = nullptr;
+    name = PyString_FromString(cname);
+    if (!name) { Py_DECREF(T); return nullptr;}
+    PyDict_SetItemString(T->pragmas,"na",name);
+    Py_DECREF(name);
   }
 
   if (PyList_Append(typelist,result) != 0) { Py_DECREF(result); return nullptr;}
@@ -1594,7 +1648,8 @@ static int module_init(PyObject* pySelf, PyObject* args, PyObject* kwargs) {
   for(int i=0;i<PyList_GET_SIZE(self->types);++i) {
     PyObject* p /*borrowed*/ = PyList_GET_ITEM(self->types,i);
     IF1_TypeObject* t /*borrowed*/ = reinterpret_cast<IF1_TypeObject*>(p);
-    if (t->name) PyDict_SetItem(self->dict,t->name,p);
+    PyObject* name /*borrowed*/ = PyDict_GetItemString(t->pragmas,"na");
+    if (name) PyDict_SetItem(self->dict,name,p);
   }
   return 0;
 }
@@ -1937,6 +1992,12 @@ initif1(void)
 
   NEWLINE = PyString_InternFromString("\n");
   if (!NEWLINE) return;
+
+  SPACEPERCENT = PyString_InternFromString(" %");
+  if (!SPACEPERCENT) return;
+
+  EQUAL = PyString_InternFromString("=");
+  if (!EQUAL) return;
 
   // ----------------------------------------------------------------------
   // Setup
