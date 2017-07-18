@@ -67,7 +67,8 @@ enum literal_parser_state_t {
 //
 // Emit the two character pragma values in lexical order for sanity and predictability
 // ----------------------------------------------------------------------
-static PyObject* pragmas(PyObject* dict) {
+static PyObject* pragmas(PyObject* dict,PyObject* auxdict = nullptr) {
+  // Get keys from the main dict.   We will sort these later
   PyObject* sorted = PyList_New(0);
   PyObject* key;
   Py_ssize_t pos = 0;
@@ -76,12 +77,34 @@ static PyObject* pragmas(PyObject* dict) {
     if (!PyString_Check(key) || PyString_GET_SIZE(key) != 2) continue;
     if (PyList_Append(sorted,key) != 0) { Py_DECREF(sorted); return nullptr; }
   }
+
+  if (auxdict) {
+    pos = 0;
+    while (PyDict_Next(auxdict, &pos, &key, nullptr)) {
+      // Only string keys of size 2 are pragmas
+      if (!PyString_Check(key) || PyString_GET_SIZE(key) != 2) continue;
+      bool match = false;
+      for(ssize_t i=0; i<PyList_GET_SIZE(sorted); ++i) {
+	int cmp = -1;
+	if (PyObject_Cmp(key,PyList_GET_ITEM(sorted,i),&cmp) == 0 && cmp == 0) {
+	  match = true;
+	  break;
+	}
+      }
+      if (!match) {
+	if (PyList_Append(sorted,key) != 0) { Py_DECREF(sorted); return nullptr; }
+      }
+    }
+  }
   if (PyList_Sort(sorted) != 0) { Py_DECREF(sorted); return nullptr; }
 
   PyObject* result = PyString_FromString("");
   for(ssize_t i=0; i < PyList_GET_SIZE(sorted); ++i) {
     PyObject* key /*borrowed*/ = PyList_GET_ITEM(sorted,i);
     PyObject* pragma /*borrowed*/ = PyDict_GetItem(dict,key);
+    if (!pragma && auxdict) {
+      pragma = PyDict_GetItem(auxdict,key);
+    }
     if (!pragma) continue;
 
     PyString_Concat(&result,SPACEPERCENT);
@@ -276,43 +299,6 @@ typedef struct {
 static PyNumberMethods inport_number;
 
 // ----------------------------------------------------------------------
-// PortInfo & OutPort
-// ----------------------------------------------------------------------
-const char* outport_doc = "TBD: output port";
-static PyTypeObject IF1_OutPortType;
-
-struct PortInfo {
-private:
-  PyObject* weaktype;
-  PyObject* dict;
-public:
-  PortInfo() : weaktype(nullptr), dict(nullptr) {}
-  int settype(PyObject* T) {
-    Py_XDECREF(weaktype);
-    weaktype = PyWeakref_NewRef(T,0);
-    if (!weaktype) return -1;
-    return 0;
-  }
-
-  PyObject* gettype() {
-    PyObject* type /*borrowed*/ = PyWeakref_GET_OBJECT(weaktype);
-    if (type == Py_None) return PyErr_Format(PyExc_RuntimeError,"disconnected type");
-    Py_INCREF(type);
-    return type;
-  }
-};
-
-typedef struct {
-  PyObject_HEAD
-
-  PyObject* weaksrc;
-  ssize_t port;
-
-} IF1_OutPortObject;
-
-static PyNumberMethods outport_number;
-
-// ----------------------------------------------------------------------
 // Node
 // ----------------------------------------------------------------------
 const char* node_doc = "TBD: node";
@@ -320,6 +306,7 @@ const char* node_doc = "TBD: node";
 static PyTypeObject IF1_NodeType;
 
 struct Edge;
+struct PortInfo;
 typedef struct {
   PyObject_HEAD
   PyObject* weakmodule;
@@ -348,6 +335,87 @@ static PyMemberDef node_members[] = {
 };
 
 // ----------------------------------------------------------------------
+// OutPort and PortInfo
+// ----------------------------------------------------------------------
+const char* outport_doc = "TBD: output port";
+static PyTypeObject IF1_OutPortType;
+
+typedef struct {
+  PyObject_HEAD
+
+  PyObject* weaksrc;
+  ssize_t port;
+
+} IF1_OutPortObject;
+
+struct PortInfo {
+private:
+  PyObject* weaktype;
+  PyObject* dict;
+public:
+  PortInfo() : weaktype(nullptr), dict(PyDict_New()) {}
+
+  PortInfo(const PortInfo& other) {
+    this->operator=(other);
+  }
+
+  PortInfo& operator=(const PortInfo& other) {
+    if (this != &other) {
+      Py_XDECREF(weaktype);
+      Py_XDECREF(dict);
+
+      Py_XINCREF(weaktype = other.weaktype);
+      Py_XINCREF(dict = other.dict);
+    }
+    return *this;
+  }
+
+  ~PortInfo() {
+    Py_XDECREF(weaktype);
+    Py_DECREF(dict);
+  }
+
+  PyObject* /*borrowed*/ pragmas() {
+    return dict;
+  }
+
+  static PortInfo* portinfo_from_outport(PyObject* outport) {
+    IF1_OutPortObject* self = reinterpret_cast<IF1_OutPortObject*>(outport);
+    PyObject* node /*borrowed*/ = PyWeakref_GET_OBJECT(self->weaksrc);
+    if (node == Py_None) {
+      PyErr_Format(PyExc_RuntimeError,"iport is disconnected from node");
+      return nullptr;
+    }
+    IF1_NodeObject* N = reinterpret_cast<IF1_NodeObject*>(node);
+
+    std::map<long,PortInfo>::iterator p = N->outputs->find(self->port);
+    if (p == N->outputs->end()) {
+      PyErr_Format(PyExc_IndexError,"No such port %ld",self->port);
+      return nullptr;
+    }
+
+    return &p->second;
+  }
+
+  int settype(PyObject* T) {
+    Py_XDECREF(weaktype);
+    weaktype = PyWeakref_NewRef(T,0);
+    if (!weaktype) return -1;
+    return 0;
+  }
+
+  PyObject* /*owned*/ gettype() {
+    PyObject* type /*borrowed*/ = PyWeakref_GET_OBJECT(weaktype);
+    if (type == Py_None) return PyErr_Format(PyExc_RuntimeError,"disconnected type");
+    Py_INCREF(type);
+    return type;
+  }
+};
+
+
+static PyNumberMethods outport_number;
+
+// ----------------------------------------------------------------------
 // Edge
 // ----------------------------------------------------------------------
 struct Edge {
@@ -357,33 +425,56 @@ struct Edge {
   PyObject* weaksrc;
   long      oport;
 
-  Edge() : literal_type(nullptr),weaksrc(nullptr),oport(0) {}
-  Edge(const char* value, PyObject* type) : value(value), literal_type(type), weaksrc(nullptr), oport(0) {
+  PyObject* pragmas;
+
+  Edge() : literal_type(nullptr),weaksrc(nullptr),oport(0),pragmas(PyDict_New()) {}
+  Edge(const char* value, PyObject* type) : value(value), literal_type(type), weaksrc(nullptr), oport(0), pragmas(PyDict_New()) {
     Py_XINCREF(type);
   }
-  Edge(PyObject* weaksrc, long oport) : literal_type(nullptr), weaksrc(weaksrc), oport(oport) {
+  Edge(PyObject* weaksrc, long oport) : literal_type(nullptr), weaksrc(weaksrc), oport(oport), pragmas(PyDict_New()) {
     Py_XINCREF(weaksrc);
   }
   ~Edge() {
     Py_XDECREF(literal_type);
     Py_XDECREF(weaksrc);
+    Py_XDECREF(pragmas);
   }
   Edge(const Edge& other) {
-    value = other.value;
-    Py_XINCREF(literal_type = other.literal_type);
-
-    Py_XINCREF(weaksrc = other.weaksrc);
-    oport = other.oport;
+    this->operator=(other);
   }
   Edge& operator=(const Edge& other) {
     if (&other != this) {
+      Py_XDECREF(literal_type);
+      Py_XDECREF(weaksrc);
+      Py_XDECREF(pragmas);
+      
       value = other.value;
       Py_XINCREF(literal_type = other.literal_type);
 
       Py_XINCREF(weaksrc = other.weaksrc);
       oport = other.oport;
+
+      Py_XINCREF(pragmas = other.pragmas);
     }
     return *this;
+  }
+
+
+  static Edge* edge_from_inport(PyObject* inport) {
+    IF1_InPortObject* self = reinterpret_cast<IF1_InPortObject*>(inport);
+    PyObject* node /*borrowed*/ = PyWeakref_GET_OBJECT(self->weakdst);
+    if (node == Py_None) {
+      PyErr_Format(PyExc_RuntimeError,"iport is disconnected from node");
+      return nullptr;
+    }
+
+    IF1_NodeObject* N = reinterpret_cast<IF1_NodeObject*>(node);
+    std::map<long,Edge>::iterator p = N->edges->find(self->port);
+    if ( p == N->edges->end() ) {
+      PyErr_Format(PyExc_IndexError,"unbound input port %ld",self->port);
+      return nullptr;
+    }
+    return &p->second;
   }
 
   PyObject* /*owned*/ get_literal() {
@@ -436,6 +527,20 @@ struct Edge {
     long elabel = PyInt_AsLong(pylabel);
     Py_DECREF(pylabel);
     return elabel;
+  }
+
+  PortInfo* /*borrowed*/ get_portinfo() {
+    if (!oport) return nullptr;
+
+    PyObject* src /*borrowed*/ = get_src();
+    if (src == Py_None) return nullptr;
+
+    IF1_NodeObject* N = reinterpret_cast<IF1_NodeObject*>(src);
+
+    std::map<long,PortInfo>::iterator p = N->outputs->find(oport);
+    if (p == N->outputs->end()) return nullptr;
+
+    return &p->second;
   }
 
 };
@@ -680,6 +785,70 @@ static PyObject* inport_lshift(PyObject* pySelf, PyObject* value) {
   return PyErr_Format(PyExc_NotImplementedError,"cannot wire an input with type %s",value->ob_type->tp_name);
 }
 
+static PyObject* inport_richcompare(PyObject* pySelf, PyObject* pyOther, int op) {
+  // types must match
+  if (!PyObject_IsInstance(pyOther,(PyObject*)&IF1_InPortType)) return Py_NotImplemented;
+
+  IF1_InPortObject* self = reinterpret_cast<IF1_InPortObject*>(pySelf);
+  IF1_InPortObject* other = reinterpret_cast<IF1_InPortObject*>(pyOther);
+
+  PyObject* result = nullptr;
+  switch(op) {
+  case Py_LT:
+  case Py_LE:
+    return Py_NotImplemented;
+  case Py_EQ:
+    if (self == other) {
+      result = Py_True;
+    } else {
+      result = (PyWeakref_GET_OBJECT(self->weakdst) == PyWeakref_GET_OBJECT(self->weakdst) &&
+		self->port == other->port)?Py_True:Py_False;
+    }
+    break;
+  case Py_NE:
+    if (self == other) {
+      result = Py_False;
+    } else {
+      result = (PyWeakref_GET_OBJECT(self->weakdst) == PyWeakref_GET_OBJECT(self->weakdst) &&
+		self->port == other->port)?Py_False:Py_True;
+    }
+    break;
+  case Py_GT:
+  case Py_GE:
+    return Py_NotImplemented;
+  }
+  Py_INCREF(result);
+  return result;
+}
+
+static PyObject* inport_getattro(PyObject* pySelf, PyObject* attr) {
+  if (PyString_Check(attr) && PyString_GET_SIZE(attr) == 2) {
+    //PyObject* rhs = PyDict_GetItem(self->pragmas,attr);
+    //if (rhs) { Py_INCREF(rhs); return rhs; }
+    //PyErr_Clear();
+    puts("get pragma");
+  }
+ return PyObject_GenericGetAttr(pySelf,attr);
+}
+static int inport_setattro(PyObject* pySelf, PyObject* attr, PyObject* rhs) {
+  if (PyString_Check(attr) && PyString_GET_SIZE(attr) == 2) {
+    Edge* e = Edge::edge_from_inport(pySelf);
+    if (e) {
+      if (rhs) {
+	return PyDict_SetItem(e->pragmas,attr,rhs);
+      } else {
+	int status = PyDict_DelItem(e->pragmas,attr);
+	if (status) {
+	  PyErr_Format(PyExc_AttributeError,"no such pragma '%s'",PyString_AS_STRING(attr));
+	}
+	return status;
+      }
+    }
+  }
+
+  return PyObject_GenericSetAttr(pySelf,attr,rhs);
+}
+
 static PyObject* inport_get_node(PyObject* pySelf,void*) {
   IF1_InPortObject* self = reinterpret_cast<IF1_InPortObject*>(pySelf);
   PyObject* node /*borrowed*/ = PyWeakref_GET_OBJECT(self->weakdst);
@@ -694,53 +863,44 @@ static PyObject* inport_get_port(PyObject* pySelf,void*) {
   return PyInt_FromLong(self->port);
 }
 static PyObject* inport_get_literal(PyObject* pySelf,void*) {
-  IF1_InPortObject* self = reinterpret_cast<IF1_InPortObject*>(pySelf);
-  PyObject* node /*borrowed*/ = PyWeakref_GET_OBJECT(self->weakdst);
-  if (node == Py_None) return PyErr_Format(PyExc_RuntimeError,"iport is disconnected from node");
+  Edge* e = Edge::edge_from_inport(pySelf);
+  if (!e) return nullptr;
 
-  IF1_NodeObject* N = reinterpret_cast<IF1_NodeObject*>(node);
-  std::map<long,Edge>::iterator p = N->edges->find(self->port);
-  if ( p == N->edges->end() ) return PyErr_Format(PyExc_IndexError,"unbound input port %ld",self->port);
-
-  return p->second.get_literal();
+  return e->get_literal();
 }
 static PyObject* inport_get_type(PyObject* pySelf,void*) {
-  IF1_InPortObject* self = reinterpret_cast<IF1_InPortObject*>(pySelf);
-  PyObject* node /*borrowed*/ = PyWeakref_GET_OBJECT(self->weakdst);
-  if (node == Py_None) return PyErr_Format(PyExc_RuntimeError,"iport is disconnected from node");
+  Edge* e = Edge::edge_from_inport(pySelf);
+  if (!e) return nullptr;
 
-  IF1_NodeObject* N = reinterpret_cast<IF1_NodeObject*>(node);
-  std::map<long,Edge>::iterator p = N->edges->find(self->port);
-  if ( p == N->edges->end() ) return PyErr_Format(PyExc_IndexError,"unbound input port %ld",self->port);
-
-  PyObject* result /*borrowed*/ = p->second.get_type();
-  Py_XINCREF(result);
-  return result;
+  PyObject* T /*borrowed*/ = e->get_type();
+  Py_XINCREF(T);
+  return T;
 }
 static PyObject* inport_get_src(PyObject* pySelf,void*) {
-  IF1_InPortObject* self = reinterpret_cast<IF1_InPortObject*>(pySelf);
-  PyObject* node /*borrowed*/ = PyWeakref_GET_OBJECT(self->weakdst);
-  if (node == Py_None) return PyErr_Format(PyExc_RuntimeError,"iport is disconnected from node");
+  Edge* e = Edge::edge_from_inport(pySelf);
+  if (!e) return nullptr;
 
-  IF1_NodeObject* N = reinterpret_cast<IF1_NodeObject*>(node);
-  std::map<long,Edge>::iterator p = N->edges->find(self->port);
-  if ( p == N->edges->end() ) return PyErr_Format(PyExc_IndexError,"unbound input port %ld",self->port);
+  PyObject* N /*borrowed*/ = e->get_src();
+  Py_XINCREF(N);
+  return N;
+}
 
-  PyObject* result = /*borrowed*/ p->second.get_src();
-  Py_XINCREF(result);
+static PyObject* inport_get_oport(PyObject* pySelf,void*) {
+  Edge* e = Edge::edge_from_inport(pySelf);
+  if (!e) return nullptr;
+
+  return e->get_oport();
+}
+
+static PyObject* inport_get_pragmas(PyObject* pySelf,void*) {
+  Edge* e = Edge::edge_from_inport(pySelf);
+  if (!e) return nullptr;
+
+  PyObject* result = e->pragmas;
+  Py_INCREF(result);
   return result;
 }
-static PyObject* inport_get_oport(PyObject* pySelf,void*) {
-  IF1_InPortObject* self = reinterpret_cast<IF1_InPortObject*>(pySelf);
-  PyObject* node /*borrowed*/ = PyWeakref_GET_OBJECT(self->weakdst);
-  if (node == Py_None) return PyErr_Format(PyExc_RuntimeError,"iport is disconnected from node");
 
-  IF1_NodeObject* N = reinterpret_cast<IF1_NodeObject*>(node);
-  std::map<long,Edge>::iterator p = N->edges->find(self->port);
-  if ( p == N->edges->end() ) return PyErr_Format(PyExc_IndexError,"unbound input port %ld",self->port);
-
-  return p->second.get_oport();
-}
 static PyGetSetDef inport_getset[] = {
   {(char*)"node",inport_get_node,nullptr,(char*)"Get the node associated with this port reference"},
   {(char*)"port",inport_get_port,nullptr,(char*)"Get the port number associated with this port reference"},
@@ -748,6 +908,8 @@ static PyGetSetDef inport_getset[] = {
   {(char*)"type",inport_get_type,nullptr,(char*)"Get the type associated with this port reference"},
   {(char*)"src",inport_get_src,nullptr,(char*)"Get the output node associated with this input port reference (None for literal)"},
   {(char*)"oport",inport_get_oport,nullptr,(char*)"Get the output port number associated with this port reference (0 for literal)"},
+  {(char*)"pragmas",inport_get_pragmas,nullptr,(char*)"Get the pragmas associated with this port reference"},
+
   {nullptr}
 };
 
@@ -791,37 +953,151 @@ static PyObject* outport_int(PyObject* pySelf) {
   return PyInt_FromLong(self->port);
 }
 
+static PyObject* outport_getattro(PyObject* pySelf, PyObject* attr) {
+  if (PyString_Check(attr) && PyString_GET_SIZE(attr) == 2) {
+    PortInfo* info = PortInfo::portinfo_from_outport(pySelf);
+    if (info) {
+      PyObject* rhs = PyDict_GetItem(info->pragmas(),attr);
+      if (rhs) { Py_INCREF(rhs); return rhs; }
+      PyErr_Clear();
+    }
+  }
+  return PyObject_GenericGetAttr(pySelf,attr);
+}
+static int outport_setattro(PyObject* pySelf, PyObject* attr, PyObject* rhs) {
+  if (PyString_Check(attr) && PyString_GET_SIZE(attr) == 2) {
+    PortInfo* info = PortInfo::portinfo_from_outport(pySelf);
+    if (info) {
+      if (rhs) {
+	return PyDict_SetItem(info->pragmas(),attr,rhs);
+      } else {
+	int status = PyDict_DelItem(info->pragmas(),attr);
+	if (status) {
+	  PyErr_Format(PyExc_AttributeError,"no such pragma '%s'",PyString_AS_STRING(attr));
+	}
+	return status;
+      }
+    }
+  }
+  return PyObject_GenericSetAttr(pySelf,attr,rhs);
+}
+
+static PyObject* outport_richcompare(PyObject* pySelf, PyObject* pyOther, int op) {
+  // types must match
+  if (!PyObject_IsInstance(pyOther,(PyObject*)&IF1_OutPortType)) return Py_NotImplemented;
+
+  IF1_OutPortObject* self = reinterpret_cast<IF1_OutPortObject*>(pySelf);
+  IF1_OutPortObject* other = reinterpret_cast<IF1_OutPortObject*>(pyOther);
+
+  PyObject* result = nullptr;
+  switch(op) {
+  case Py_LT:
+  case Py_LE:
+    return Py_NotImplemented;
+  case Py_EQ:
+    if (self == other) {
+      result = Py_True;
+    } else {
+      result = (PyWeakref_GET_OBJECT(self->weaksrc) == PyWeakref_GET_OBJECT(self->weaksrc) &&
+		self->port == other->port)?Py_True:Py_False;
+    }
+    break;
+  case Py_NE:
+    if (self == other) {
+      result = Py_False;
+    } else {
+      result = (PyWeakref_GET_OBJECT(self->weaksrc) == PyWeakref_GET_OBJECT(self->weaksrc) &&
+		self->port == other->port)?Py_False:Py_True;
+    }
+    break;
+  case Py_GT:
+  case Py_GE:
+    return Py_NotImplemented;
+  }
+  Py_INCREF(result);
+  return result;
+}
+
 static PyObject* outport_get_node(PyObject* pySelf,void*) {
   IF1_OutPortObject* self = reinterpret_cast<IF1_OutPortObject*>(pySelf);
   PyObject* node /*borrowed*/ = PyWeakref_GET_OBJECT(self->weaksrc);
-  if (node == Py_None) return PyErr_Format(PyExc_RuntimeError,"iport is disconnected from node");
+  if (node == Py_None) return PyErr_Format(PyExc_RuntimeError,"out port is disconnected from node");
   Py_INCREF(node);
   return node;
 }
 static PyObject* outport_get_port(PyObject* pySelf,void*) {
   IF1_OutPortObject* self = reinterpret_cast<IF1_OutPortObject*>(pySelf);
   PyObject* node /*borrowed*/ = PyWeakref_GET_OBJECT(self->weaksrc);
-  if (node == Py_None) return PyErr_Format(PyExc_RuntimeError,"iport is disconnected from node");
+  if (node == Py_None) return PyErr_Format(PyExc_RuntimeError,"out port is disconnected from node");
   return PyInt_FromLong(self->port);
 }
 static PyObject* outport_get_type(PyObject* pySelf,void*) {
-  IF1_OutPortObject* self = reinterpret_cast<IF1_OutPortObject*>(pySelf);
-  PyObject* node /*borrowed*/ = PyWeakref_GET_OBJECT(self->weaksrc);
-  if (node == Py_None) return PyErr_Format(PyExc_RuntimeError,"iport is disconnected from node");
-  IF1_NodeObject* N = reinterpret_cast<IF1_NodeObject*>(node);
+  PortInfo* info = PortInfo::portinfo_from_outport(pySelf);
+  if (!info) return nullptr;
+  return info->gettype();
+}
+static PyObject* outport_get_pragmas(PyObject* pySelf,void*) {
+  PortInfo* info = PortInfo::portinfo_from_outport(pySelf);
+  if (!info) return nullptr;
+  PyObject* result = info->pragmas();
+  Py_XINCREF(result);
+  return result;
+}
 
-  std::map<long,PortInfo>::iterator p = N->outputs->find(self->port);
-  if (p == N->outputs->end()) {
-    return PyErr_Format(PyExc_IndexError,"No such port %ld",self->port);
+static bool edge_match(PyObject* target,long port, PyObject* N, PyObject* result) {
+  IF1_NodeObject* node = reinterpret_cast<IF1_NodeObject*>(N);
+  for(std::map<long,Edge>::iterator p=node->edges->begin(), end = node->edges->end(); p != end; ++p) {
+    if (p->second.oport == port) {
+      PyObject* src /*borrowed*/ = PyWeakref_GET_OBJECT(p->second.weaksrc);
+      if (src == target) {
+	PyObject* in /*owned*/ = PyObject_CallFunction(N,(char*)"l",p->first);
+	if (!in) return false;
+	if (PyList_Append(result,in) < 0) { Py_DECREF(in); return -1; }
+	Py_DECREF(in);
+      }
+    }
+  }
+  return true;
+}
+
+static PyObject* outport_get_edges(PyObject* pySelf,void*) {
+  IF1_OutPortObject* self = reinterpret_cast<IF1_OutPortObject*>(pySelf);
+
+  PyObject* node /*borrowed*/ = PyWeakref_GET_OBJECT(self->weaksrc);
+  if (node == Py_None) return PyErr_Format(PyExc_RuntimeError,"out port is disconnected from node");
+
+  PyObject* home /*owned*/ = PyNumber_Positive(node);
+  if (!home) return nullptr;
+
+  PyObject* result /*owend*/ = PyList_New(0);
+  IF1_GraphObject* G = reinterpret_cast<IF1_GraphObject*>(home);
+
+  // Check the graph itself
+  if (!edge_match(node,self->port,home,result)) {
+    Py_DECREF(home);
+    Py_DECREF(result);
+    return nullptr;
   }
 
-  return p->second.gettype();
+  // Check all the top level children
+  for(ssize_t i=0; i < PyList_GET_SIZE(G->node.children); ++i) {
+    if (!edge_match(node,self->port,PyList_GET_ITEM(G->node.children,i),result)) {
+      Py_DECREF(home);
+      Py_DECREF(result);
+      return nullptr;
+    }
+  }
+
+  Py_DECREF(home);
+  return result;
 }
 
 static PyGetSetDef outport_getset[] = {
   {(char*)"node",outport_get_node,nullptr,(char*)"Get the node associated with this port reference"},
   {(char*)"port",outport_get_port,nullptr,(char*)"Get the port number associated with this port reference"},
   {(char*)"type",outport_get_type,nullptr,(char*)"Get the type associated with this port reference"},
+  {(char*)"pragmas",outport_get_pragmas,nullptr,(char*)"Get the pragmas associated with this port reference"},
+  {(char*)"edges",outport_get_edges,nullptr,(char*)"Get edges attached to this port reference"},
   {nullptr}
 };
 
@@ -990,20 +1266,36 @@ static PyObject* node_inedge_if1(PyObject* pySelf,PyObject** pif1) {
     PyObject* eif1 = nullptr;
     long port = ii->first;
     Edge& e = ii->second;
+    PyObject* auxdict /*borrowed*/ = nullptr;
     if (e.oport) {
-      eif1 = PyString_FromFormat("E %ld %ld %ld %ld %ld\n",
+      PortInfo* info = e.get_portinfo();
+      if (info) auxdict = info->pragmas();
+      eif1 = PyString_FromFormat("E %ld %ld %ld %ld %ld",
 				 e.get_src_label(),e.oport,
 				 ilabel,port,
 				 e.get_type_label()
 				 );
     } else {
-      eif1 = PyString_FromFormat("L     %ld %ld %ld \"%s\"\n",
+      eif1 = PyString_FromFormat("L     %ld %ld %ld \"%s\"",
 				 ilabel,port,
 				 e.get_type_label(),
 				 e.value.c_str()
 				 );
     }
     if (!eif1) { Py_DECREF(*pif1); return nullptr; }
+
+    // Add in the pragmas
+    PyObject* prags /*owned*/ = pragmas(e.pragmas,auxdict);
+    if (!prags) {
+      Py_DECREF(*pif1);
+      Py_DECREF(eif1);
+      return nullptr;
+    }
+    PyString_ConcatAndDel(&eif1,prags);
+    if (!eif1) { Py_DECREF(*pif1); return nullptr; }
+    PyString_Concat(&eif1,NEWLINE);
+    if (!eif1) { Py_DECREF(*pif1); return nullptr; }
+
     PyString_ConcatAndDel(pif1,eif1);
     if (!*pif1) return nullptr;
   }
@@ -1035,6 +1327,37 @@ static PyObject* node_get_if1(PyObject* pySelf,void*) {
   if (!if1) return nullptr;
   return node_inedge_if1(pySelf,&if1);
 }
+
+PyObject* node_get_inputs(PyObject* pySelf,void*) {
+  IF1_NodeObject* self = reinterpret_cast<IF1_NodeObject*>(pySelf);
+
+  PyObject* result = PyList_New(0);
+  for(std::map<long,Edge>::iterator p=self->edges->begin(), end=self->edges->end(); p != end; ++p) {
+    PyObject* in /*owned*/ = PyObject_CallFunction(pySelf,(char*)"l",p->first);
+    if (!in) { Py_DECREF(result); return nullptr; }
+    if (PyList_Append(result,in) != 0) { Py_DECREF(result); return nullptr; }
+  }
+  return result;
+}
+
+PyObject* node_get_outputs(PyObject* pySelf,void*) {
+  IF1_NodeObject* self = reinterpret_cast<IF1_NodeObject*>(pySelf);
+
+  PyObject* result = PyList_New(0);
+  for(std::map<long,PortInfo>::iterator p=self->outputs->begin(), end=self->outputs->end(); p != end; ++p) {
+    PyObject* out /*owned*/ = PySequence_GetItem(pySelf,p->first);
+    if (!out) { Py_DECREF(result); return nullptr; }
+    if (PyList_Append(result,out) != 0) { Py_DECREF(result); return nullptr; }
+  }
+  return result;
+}
+
+static PyGetSetDef node_getset[] = {
+  {(char*)"if1",node_get_if1,nullptr,(char*)"IF1 representation (including edges)",nullptr},
+  {(char*)"inputs",node_get_inputs,nullptr,(char*)"all input ports"},
+  {(char*)"outputs",node_get_outputs,nullptr,(char*)"all output ports"},
+  {nullptr}
+};
 
 static ssize_t node_seq_length(PyObject* pySelf) {
   IF1_NodeObject* self = reinterpret_cast<IF1_NodeObject*>(pySelf);
@@ -1074,11 +1397,6 @@ static int node_seq_setitem(PyObject* pySelf,ssize_t port,PyObject* type) {
 
   return self->outputs->operator[](port).settype(type);
 }
-
-static PyGetSetDef node_getset[] = {
-  {(char*)"if1",node_get_if1,nullptr,(char*)"IF1 representation (including edges)",nullptr},
-  {nullptr}
-};
 
 
 /*
@@ -2293,6 +2611,9 @@ initif1(void)
   IF1_InPortType.tp_dealloc = inport_dealloc;
   IF1_InPortType.tp_str = inport_str;
   IF1_InPortType.tp_repr = inport_str;
+  IF1_InPortType.tp_richcompare = inport_richcompare;
+  IF1_InPortType.tp_getattro = inport_getattro;
+  IF1_InPortType.tp_setattro = inport_setattro;
   IF1_InPortType.tp_getset = inport_getset;
   IF1_InPortType.tp_as_number = &inport_number;
   inport_number.nb_lshift = inport_lshift;
@@ -2309,6 +2630,9 @@ initif1(void)
   IF1_OutPortType.tp_dealloc = outport_dealloc;
   IF1_OutPortType.tp_str = outport_str;
   IF1_OutPortType.tp_repr = outport_str;
+  IF1_OutPortType.tp_getattro = outport_getattro;
+  IF1_OutPortType.tp_setattro = outport_setattro;
+  IF1_OutPortType.tp_richcompare = outport_richcompare;
   IF1_OutPortType.tp_getset = outport_getset;
   IF1_OutPortType.tp_as_number = &outport_number;
   outport_number.nb_int = outport_int;

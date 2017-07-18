@@ -341,7 +341,176 @@ T 10 3 0 7
         self.assertIn('N 1 141 %fn=foo.py %sl=111',m.if1)
         return
 
+    def test_edgepragmas(self):
+        m = sap.if1.Module()
+        g = m.addfunction("main")
+
+        # Decorate some outports
+        g[1] = m.integer
+        g[1].mk = 'V'
+        self.assertEqual(g[1].pragmas,{'mk':'V'})
+
+        g[2] = m.integer
+        g[2].na = 'y'
+        g[2].mk = 'Q'
+        g[2].zz = 'shared'
+        self.assertEqual(g[2].pragmas,{'mk':'Q','na':'y','zz':'shared'})
+
+        g[3] = m.integer
+        self.assertEqual(g[3].pragmas,{})
+
+        # Decorate some inports
+        g(1) << 3
+        g(1).na = 'x'
+        self.assertEqual(g(1).pragmas,{'na':'x'})
+
+        g(2) << g[1]
+        g(2).mk = 'K'
+        self.assertEqual(g(2).pragmas,{'mk':'K'})
+
+        g(3) << g[2]
+        g(3).mk = 'Z'
+        self.assertEqual(g(3).pragmas,{'mk':'Z'})
+
+        g(4) << g[2]
+        self.assertEqual(g(4).pragmas,{})
+
+        # When we generate if1, we merge the pragmas from both src and destination (destination is primary)
+        self.assertEqual('''X 14 "main"
+L     0 1 4 "3" %na=x
+E 0 1 0 2 4 %mk=K
+E 0 2 0 3 4 %mk=Z %na=y %zz=shared
+E 0 2 0 4 4 %mk=Q %na=y %zz=shared
+''',g.if1)
+
+        return
+
+    def test_outports(self):
+        m = sap.if1.Module()
+        g = m.addfunction("main")
+        g[1] = m.integer
+        self.assertIs(g[1].node,g)
+        self.assertEqual(g[1].port,1)
+        self.assertIs(g[1].type,m.integer)
+        self.assertEqual(g[1].pragmas,{})
+        self.assertEqual(int(g[1]),1)
+
+        g[2] = m.integer
+        self.assertIs(g[2].node,g)
+        self.assertEqual(g[2].port,2)
+        self.assertIs(g[2].type,m.integer)
+        self.assertEqual(g[2].pragmas,{})
+        self.assertEqual(int(g[2]),2)
+
+        plus = g.addnode(sap.if1.IFPlus)
+        plus[1] = m.integer
+        self.assertEqual(int(plus[1]),1)
+
+        plus(1) << g[2]
+        self.assertIs(plus(1).node,plus)
+        self.assertIs(+plus(1).node,g)
+        self.assertEqual(plus(1).port,1)
+        self.assertIs(plus(1).type,m.integer)
+        self.assertIs(plus(1).literal,None)
+        self.assertIs(plus(1).src,g)
+        self.assertIs(plus(1).oport,2)
+        self.assertEqual(int(plus(1)),1)
+
+        plus(2) << 5
+        self.assertIs(plus(2).node,plus)
+        self.assertIs(+plus(2).node,g)
+        self.assertEqual(plus(2).port,2)
+        self.assertIs(plus(2).type,m.integer)
+        self.assertEqual(plus(2).literal,'5')
+        self.assertIs(plus(2).src,None)
+        self.assertEqual(plus(2).oport,0)
+        self.assertEqual(int(plus(2)),2)
+
+        g(1) << 3
+        self.assertIs(g(1).node,g)
+        self.assertIs(+g(1).node,g)
+        self.assertEqual(g(1).port,1)
+        self.assertIs(g(1).type,m.integer)
+        self.assertEqual(g(1).literal,'3')
+        self.assertIs(g(1).src,None)
+        self.assertEqual(g(1).oport,0)
+
+        g(2) << g[1]
+        self.assertIs(g(2).node,g)
+        self.assertIs(+g(2).node,g)
+        self.assertEqual(g(2).port,2)
+        self.assertIs(g(2).type,m.integer)
+        self.assertIs(g(2).literal,None)
+        self.assertIs(g(2).src,g)
+        self.assertEqual(g(2).oport,1)
+
+        g(3) << plus[1]
+        self.assertIs(g(3).node,g)
+        self.assertIs(+g(3).node,g)
+        self.assertEqual(g(3).port,3)
+        self.assertIs(g(3).type,m.integer)
+        self.assertIs(g(3).literal,None)
+        self.assertIs(g(3).src,plus)
+        self.assertEqual(g(3).oport,1)
+
+        g(4) << 10
+        self.assertIs(g(4).node,g)
+        self.assertIs(+g(4).node,g)
+        self.assertEqual(g(4).port,4)
+        self.assertIs(g(4).type,m.integer)
+        self.assertEqual(g(4).literal,"10")
+        self.assertIs(g(4).src,None)
+        self.assertEqual(g(4).oport,0)
+
+        g(5) << g[1]
+        g(6) << g[2]
+
+        self.assertEqual(g[1].edges,[g(2),g(5)])
+        self.assertEqual(g[2].edges,[g(6),plus(1)])
+
+        return
+
+    def test_outputs(self):
+        m = sap.if1.Module()
+        g = m.addfunction("main")
+        g[1] = m.integer
+        g[2] = m.real
+        self.assertEqual(g[1],g[1])
+        self.assertNotEqual(g[1],g[2])
+
+        self.assertEqual(g.outputs,[g[1],g[2]])
+        return
+        
+    def test_inputs(self):
+        m = sap.if1.Module()
+        g = m.addfunction("main")
+        g(1) << 1
+        g(2) << 2
+        self.assertEqual(g(1),g(1))
+        self.assertNotEqual(g(1),g(2))
+
+        self.assertEqual(g.inputs,[g(1),g(2)])
+        return
+        
+
 if __name__ == '__main__':
+    if 1:
+        m = sap.if1.Module()
+        g = m.addfunction("main")
+        g[1] = m.integer
+        g[2] = m.integer
+
+        g(1) << g[1]
+        g(2) << g[1]
+        g(3) << g[1]
+        g(4) << g[1]
+
+        plus = g.addnode(sap.if1.IFPlus)
+        plus(1) << g[1]
+
+        print g[1].edges
+
+        print g.if1
 
     if 0:
         m = sap.if1.Module()
