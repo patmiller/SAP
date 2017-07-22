@@ -491,8 +491,8 @@ E 0 2 0 4 4 %mk=Q %na=y %zz=shared
 
         self.assertEqual(g.inputs,[g(1),g(2)])
         return
-        
-    def test_moduletypes(self):
+
+    def test_empty_module(self):
         m = sap.if1.Module()
 
         self.assertTrue(isinstance(m.types,list))
@@ -523,9 +523,67 @@ T 7 1 6 %na=wildbasic
 T 8 10 %na=wild
 T 9 0 2 %na=string
 ''')
-
         return
 
+    def test_module_pragmas(self):
+        m = sap.if1.Module()
+        m.pragmas['C'] = 'IF1 Check'
+        m.pragmas['D'] = 'Dataflow ordered'
+        m.pragmas['F'] = 'Python frontend'
+        self.assertEqual(m.if1,'''T 1 1 0 %na=boolean
+T 2 1 1 %na=character
+T 3 1 2 %na=doublereal
+T 4 1 3 %na=integer
+T 5 1 4 %na=null
+T 6 1 5 %na=real
+T 7 1 6 %na=wildbasic
+T 8 10 %na=wild
+T 9 0 2 %na=string
+C$  C IF1 Check
+C$  D Dataflow ordered
+C$  F Python frontend
+''')
+        return
+
+    def test_noctor_type(self):
+        with self.assertRaises(TypeError):
+            T = sap.if1.Type()
+        return
+
+    def test_type(self):
+        m = sap.if1.Module()
+
+        T = m.boolean
+        self.assertEqual(T.code,sap.if1.IF_Basic)
+        self.assertEqual(T.aux,sap.if1.IF_Boolean)
+        self.assertIs(T.parameter1,None)
+        self.assertIs(T.parameter2,None)
+
+        self.assertEqual(T.name,'boolean')
+        self.assertEqual(T.if1,'T 1 1 0 %na=boolean')
+
+        del T.name
+        self.assertIs(T.name,None)
+        self.assertEqual(T.if1,'T 1 1 0')
+
+        T.name = 'foo'
+        self.assertEqual(T.name,'foo')
+        self.assertEqual(T.if1,'T 1 1 0 %na=foo')
+
+        T.name = None
+        self.assertIs(T.name,None)
+        self.assertEqual(T.if1,'T 1 1 0')
+
+        T.name = 'baz'
+        self.assertEqual(T.name,'baz')
+
+        self.assertEqual(T.label,1)
+        self.assertEqual(int(T),1)
+
+        # Check a parameter1
+        self.assertIs(m.string.parameter1,m.character)
+        return
+    
 if __name__ == '__main__':
     import sap.jjj
     sap.if1 = sap.jjj

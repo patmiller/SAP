@@ -15,7 +15,7 @@ setup(name='SAP',
           ),
 
           Extension('sap.jjj',
-                    ['graph.cpp','jjj.cpp','module.cpp','type.cpp','node.cpp','inport.cpp','outport.cpp'],
+                    ['type.cpp','graph.cpp','jjj.cpp','module.cpp','node.cpp','inport.cpp','outport.cpp'],
                     extra_compile_args=['-std=c++11'],
                     depends=['IFX.h','module.h','type.h','node.h','graph.h','inport.h','outport.h'],
           ),

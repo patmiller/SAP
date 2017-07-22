@@ -37,9 +37,12 @@ class type : public IF1<type> {
   static PyObject* get_if1(PyObject*,void*);
   static PyObject* get_label(PyObject*,void*);
 
+
   type();
   type(python* self, PyObject* args,PyObject* kwargs);  
   type(std::shared_ptr<module>& m,long code,long aux,char const* name,std::shared_ptr<type> p1=nullptr,std::shared_ptr<type> p2=nullptr);
+
+  PyObject* lookup();
 };
 
 #endif

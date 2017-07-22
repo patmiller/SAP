@@ -31,27 +31,55 @@ PyGetSetDef type::getset[] = {
   {nullptr}
 };
 
-PyObject* type::get_code(PyObject* pySelf,void*) {
-  return PyErr_Format(PyExc_NotImplementedError,"get_code");
+PyObject* type::get_code(PyObject* self,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  return PyInt_FromLong(cxx->code);
 }
-PyObject* type::get_aux(PyObject* pySelf,void*) {
-  return PyErr_Format(PyExc_NotImplementedError,"get_aux");
+
+PyObject* type::get_aux(PyObject* self,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  return PyInt_FromLong(cxx->aux);
 }
-PyObject* type::get_parameter1(PyObject* pySelf,void*) {
-  return PyErr_Format(PyExc_NotImplementedError,"get_parameter1");
+
+PyObject* type::get_parameter1(PyObject* self,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+
+  std::shared_ptr<type> p1 = cxx->parameter1.lock();
+  if (p1) return p1->lookup();
+  Py_INCREF(Py_None);
+  return Py_None;
 }
-PyObject* type::get_parameter2(PyObject* pySelf,void*) {
-  return PyErr_Format(PyExc_NotImplementedError,"get_parameter2");
+
+PyObject* type::get_parameter2(PyObject* self,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+
+  std::shared_ptr<type> p2 = cxx->parameter2.lock();
+  if (p2) return p2->lookup();
+  Py_INCREF(Py_None);
+  return Py_None;
 }
+
 PyObject* type::get_pragmas(PyObject* pySelf,void*) {
   return PyErr_Format(PyExc_NotImplementedError,"get_pragmas");
 }
-PyObject* type::get_name(PyObject* pySelf,void*) {
-  return PyErr_Format(PyExc_NotImplementedError,"get_name");
+
+PyObject* type::get_name(PyObject* self,void*) {
+  STATIC_STR(NA,"na");
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  PyObject* name /*borrowed*/ = PyDict_GetItem(cxx->pragmas.borrow(),NA);
+  if (!name) name = Py_None;
+  Py_INCREF(name);
+  return name;
 }
-int type::set_name(PyObject* pySelf,PyObject*,void*) {
-  PyErr_Format(PyExc_NotImplementedError,"set_name");
-  return -1;
+int type::set_name(PyObject* self,PyObject* name,void*) {
+  STATIC_STR(NA,"na");
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  if (!name || name == Py_None) {
+    PyDict_DelItem(cxx->pragmas.borrow(),NA);
+  } else {
+    PyDict_SetItem(cxx->pragmas.borrow(),NA,name);
+  }
+  return 0;
 }
 PyObject* type::get_if1(PyObject* self,void*) {
   auto cxx = reinterpret_cast<python*>(self)->cxx;
@@ -248,5 +276,27 @@ type::type(std::shared_ptr<module>& m,long code,long aux,char const* name,std::s
     if (PyDict_SetItemString(pragmas.borrow(),"na",na.borrow()) != 0) throw PyErr_Occurred();
   }
 }
+
+// ----------------------------------------------------------------------
+// \brief find the type in the module's type list
+// ----------------------------------------------------------------------
+PyObject* type::lookup() {
+  std::shared_ptr<module> m = weakmodule.lock();
+  if (!m) return PyErr_Format(PyExc_RuntimeError,"disconnected");
+
+  // Look in the list of types for this one
+  for(ssize_t i=0;i<PyList_GET_SIZE(m->types.borrow());++i) {
+    PyObject* T = PyList_GET_ITEM(m->types.borrow(),i);
+    if (!PyObject_IsInstance(T,(PyObject*)&Type)) continue;
+
+    auto cxx = reinterpret_cast<python*>(T)->cxx;
+    if (cxx.get() == this) {
+      Py_INCREF(T);
+      return T;
+    }
+  }
+  return PyErr_Format(PyExc_RuntimeError,"disconnected");
+}
+
 PyNumberMethods type::as_number;
 PySequenceMethods type::as_sequence;
