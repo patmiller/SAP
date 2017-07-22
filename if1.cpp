@@ -390,7 +390,7 @@ public:
 
     std::map<long,PortInfo>::iterator p = N->outputs->find(self->port);
     if (p == N->outputs->end()) {
-      PyErr_Format(PyExc_IndexError,"No such port %ld",self->port);
+      PyErr_Format(PyExc_IndexError,"No such port %zd",self->port);
       return nullptr;
     }
 

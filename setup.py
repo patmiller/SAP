@@ -7,5 +7,9 @@ setup(name='SAP',
       url='https://github.com/patmiller/SAP',
       packages=['sap','sap.tests'],
       license='BSD 3-clause',
-      ext_modules=[Extension('sap.if1', ['if1.cpp'])],
+      ext_modules=[
+          Extension('sap.if1',
+                    ['if1.cpp'],
+                    extra_compile_args=['-std=c++11'],
+          )],
       )
