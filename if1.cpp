@@ -471,7 +471,7 @@ struct Edge {
     IF1_NodeObject* N = reinterpret_cast<IF1_NodeObject*>(node);
     std::map<long,Edge>::iterator p = N->edges->find(self->port);
     if ( p == N->edges->end() ) {
-      PyErr_Format(PyExc_IndexError,"unbound input port %ld",self->port);
+      PyErr_Format(PyExc_IndexError,"unbound input port %zd",self->port);
       return nullptr;
     }
     return &p->second;
@@ -649,7 +649,7 @@ void inport_dealloc(PyObject* pySelf) {
 PyObject* inport_str(PyObject* pySelf) {
   IF1_InPortObject* self = reinterpret_cast<IF1_InPortObject*>(pySelf);
 
-  PyObject* sport /*owned*/ = PyString_FromFormat("%ld",self->port);
+  PyObject* sport /*owned*/ = PyString_FromFormat("%zd",self->port);
   if (!sport) return nullptr;
 
   PyString_Concat(&sport,COLON);
@@ -941,7 +941,7 @@ static PyObject* outport_str(PyObject* pySelf) {
   PyString_Concat(&str,COLON);
   if (!str) return nullptr;
 
-  PyObject* sport /*owned*/ = PyString_FromFormat("%ld",self->port);
+  PyObject* sport /*owned*/ = PyString_FromFormat("%zd",self->port);
   if (!sport) { Py_DECREF(str); return nullptr; }
   PyString_ConcatAndDel(&str,sport);
 
@@ -1209,7 +1209,7 @@ static PyObject* node_inport(PyObject* pySelf, PyObject* args, PyObject* kwargs)
   IF1_InPortObject* port = reinterpret_cast<IF1_InPortObject*>(p);
 
   if (!PyArg_ParseTuple(args,"l",&port->port)) return nullptr;
-  if (port->port <= 0) return PyErr_Format(PyExc_ValueError,"port must be > 0 (%ld)",port->port);
+  if (port->port <= 0) return PyErr_Format(PyExc_ValueError,"port must be > 0 (%zd)",port->port);
 
   port->weakdst = PyWeakref_NewRef(pySelf,0);
   if (!port->weakdst) { Py_DECREF(p); return nullptr; }
@@ -1369,7 +1369,7 @@ static PyObject* node_seq_getitem(PyObject* pySelf,ssize_t port) {
 
   std::map<long,PortInfo>::iterator p = self->outputs->find(port);
   if (p == self->outputs->end()) {
-    return PyErr_Format(PyExc_IndexError,"No such port %ld",port);
+    return PyErr_Format(PyExc_IndexError,"No such port %zd",port);
   }
 
   PyObject* info = PyType_GenericNew(&IF1_OutPortType,nullptr,nullptr);
@@ -1458,7 +1458,7 @@ static PyObject* graph_get_type(PyObject* pySelf,void*) {
   ssize_t ninputs = self->node.outputs->size();
   if (ninputs && self->node.outputs->rbegin()->first != ninputs) {
     return PyErr_Format(PyExc_ValueError,
-			"Function has %ld inputs, but the high port is %ld",ninputs,self->node.outputs->rbegin()->first);
+			"Function has %zd inputs, but the high port is %ld",ninputs,self->node.outputs->rbegin()->first);
   }
   PyObject* inputs = PyTuple_New(ninputs);
   if (!inputs) return nullptr;
@@ -1479,7 +1479,7 @@ static PyObject* graph_get_type(PyObject* pySelf,void*) {
   if (self->node.edges->rbegin()->first != noutputs) {
     Py_DECREF(inputs);
     return PyErr_Format(PyExc_ValueError,
-			"Function produces %ld values, but the high port is %ld",noutputs,self->node.edges->rbegin()->first);
+			"Function produces %zd values, but the high port is %ld",noutputs,self->node.edges->rbegin()->first);
   }
   PyObject* outputs = PyTuple_New(self->node.edges->size());
   if (!outputs) { Py_DECREF(inputs); return nullptr; }
