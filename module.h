@@ -22,7 +22,7 @@ class module : public IF1<module> {
   static int init(PyObject* pySelf,PyObject* args,PyObject* kwargs);
   static PyObject* getattro(PyObject*,PyObject*);
 
-  static PyObject* addtype(PyObject*,PyObject*);
+  static PyObject* addtype(PyObject*,PyObject*,PyObject*);
   static PyObject* addfunction(PyObject*,PyObject*);
 
   static PyObject* get_if1(PyObject*,void*);
@@ -30,7 +30,8 @@ class module : public IF1<module> {
   static PyObject* get_functions(PyObject*,void*);
   static PyObject* get_pragmas(PyObject*,void*);
 
-  module(python* self, PyObject* args,PyObject* kwargs);  
+  module(python* self, PyObject* args,PyObject* kwargs);
+  
 };
 
 #endif

@@ -11,7 +11,7 @@
 boolean
 >>> m.integer
 integer
->>> r = m.addtype(IF_Basic,3) # doesn't make a new type!
+>>> r = m.addtype(IF_Basic,aux=3) # doesn't make a new type!
 >>> r is m.integer
 True
 >>> m.pragmas['C'] = 'IF1 Check'
@@ -579,11 +579,68 @@ C$  F Python frontend
 
         self.assertEqual(T.label,1)
         self.assertEqual(int(T),1)
-
+ 
         # Check a parameter1
         self.assertIs(m.string.parameter1,m.character)
         return
-    
+
+    def test_addtype(self):
+        m = sap.if1.Module()
+
+        # If we re-add an existing type, we get the same type back
+        T = m.addtype(sap.if1.IF_Basic,aux=sap.if1.IF_Integer)
+        self.assertIs(T,m.integer)
+
+        # We can delete a type (auto renumbered)
+        self.assertIs(m.types[3],m.integer)
+        self.assertIn(m.integer,m.types)
+        del m.types[3]
+        self.assertNotIn(m.integer,m.types)
+
+        # Now, we create one like it and it is inserted
+        T = m.addtype(sap.if1.IF_Basic,aux=sap.if1.IF_Integer)
+        T.name = 'int'
+        self.assertIn(T,m.types)
+
+        # and the IF1 is sensible
+        self.assertEqual(m.if1,'''T 1 1 0 %na=boolean
+T 2 1 1 %na=character
+T 3 1 2 %na=doublereal
+T 4 1 4 %na=null
+T 5 1 5 %na=real
+T 6 1 6 %na=wildbasic
+T 7 10 %na=wild
+T 8 0 2 %na=string
+T 9 1 3 %na=int
+''')
+        return
+
+    def test_emptymodule(self):
+        'Build our own type table from scratch?'
+        m = sap.if1.Module('')
+
+        W = m.addtype(sap.if1.IF_Wild,name="crazy")
+        self.assertEqual(W.label,1)
+
+        I = m.addtype(sap.if1.IF_Basic,aux=sap.if1.IF_Integer)
+        self.assertEqual(I.label,2)
+        R = m.addtype(sap.if1.IF_Basic,aux=sap.if1.IF_Real)
+        self.assertEqual(R.label,3)
+
+        m.addtype(sap.if1.IF_Array,I)
+        m.addtype(sap.if1.IF_Multiple,I)
+        m.addtype(sap.if1.IF_Stream,I)
+
+        print m.if1
+        self.assertEqual(m.if1,'''T 1 10 %na=crazy
+T 2 1 3
+T 3 1 5
+T 4 0 2
+T 5 4 2
+T 6 6 2
+''')
+        return
+
 if __name__ == '__main__':
     import sap.jjj
     sap.if1 = sap.jjj

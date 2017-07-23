@@ -28,6 +28,7 @@ class PyOwned {
   }
 
   bool operator!() const { return !P; }
+  operator bool() const { return P != nullptr; }
   PyObject* borrow() { return P; }
   PyObject* incref() { Py_XINCREF(P); return P; }
 
@@ -56,7 +57,7 @@ public:
     return p->self;
   }
 
-  operator PyObject*() {
+  PyObject* package() {
     auto p = std::dynamic_pointer_cast<T>(this->shared_from_this());
 
     // Make a new Python object shell and use placement new to copy in
@@ -67,7 +68,6 @@ public:
     reinterpret_cast<python*>(o.borrow())->cxx = p;
     return o.incref();
   }
-
 
   static int init(PyObject* pySelf,PyObject* args,PyObject* kwargs) {
     // Set to a known state for the destructor

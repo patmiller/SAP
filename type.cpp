@@ -259,8 +259,8 @@ type::type(python* self, PyObject* args,PyObject* kwargs)
   throw PyErr_Format(PyExc_TypeError,"Cannot create new types this way.  see Module.addtype()");
 }
 
-type::type(std::shared_ptr<module>& m,long code,long aux,char const* name,std::shared_ptr<type> p1,std::shared_ptr<type> p2)
-  : weakmodule(m),
+type::type(long code,long aux,std::shared_ptr<type> p1,std::shared_ptr<type> p2)
+  : //weakmodule(nullptr),
     code(code),
     aux(aux),
     parameter1(p1),
@@ -269,12 +269,39 @@ type::type(std::shared_ptr<module>& m,long code,long aux,char const* name,std::s
 {
   pragmas = PyDict_New();
   if (!pragmas) throw PyErr_Occurred();
+}
 
-  if (name) {
-    PyOwned na(PyString_FromString(name));
-    if (!na) throw PyErr_Occurred();
-    if (PyDict_SetItemString(pragmas.borrow(),"na",na.borrow()) != 0) throw PyErr_Occurred();
+ssize_t type::connect(std::shared_ptr<module>& module,char const* name) {
+  STATIC_STR(NA,"na");
+
+  // If we already have this one, don't add another variant, just return
+  // the internal offset
+  ssize_t n = PyList_GET_SIZE(module->types.borrow());
+  for(ssize_t i=0; i < n; ++i) {
+    PyObject* T = PyList_GET_ITEM(module->types.borrow(),i);
+    auto p = borrow(T);
+    if (p->code == code &&
+	p->aux == aux &&
+	p->parameter1.lock() == parameter1.lock() &&
+	p->parameter2.lock() == parameter2.lock()) {
+      printf("Found match at location %zd\n",i);
+      return i;
+    }
   }
+
+  // We can finally set our owner
+  weakmodule = module;
+
+  // Add it in (conveniently at position n)
+  PyOwned asPython(package());
+  if (PyList_Append(module->types.borrow(),asPython.incref()) < 0) return -1;
+
+  // Set the name if we have it (just the main module setup)
+  if (name) {
+    PyOwned p(PyString_FromString(name));
+    if (p) PyDict_SetItem(pragmas.borrow(),NA,p.borrow());
+  }
+  return n;
 }
 
 // ----------------------------------------------------------------------

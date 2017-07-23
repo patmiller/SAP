@@ -40,9 +40,10 @@ class type : public IF1<type> {
 
   type();
   type(python* self, PyObject* args,PyObject* kwargs);  
-  type(std::shared_ptr<module>& m,long code,long aux,char const* name,std::shared_ptr<type> p1=nullptr,std::shared_ptr<type> p2=nullptr);
+  type(long code,long aux=0,std::shared_ptr<type> p1=nullptr,std::shared_ptr<type> p2=nullptr);
 
-  PyObject* lookup();
+  ssize_t connect(std::shared_ptr<module>&,char const* name=nullptr); // Set the name and connect to module
+  PyObject* lookup(); // Find raw pointer in type table
 };
 
 #endif
