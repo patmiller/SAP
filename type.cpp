@@ -239,17 +239,26 @@ PyObject* type::string(PyObject*,std::shared_ptr<type>& cxx) {
     if (!element) {Py_DECREF(result); return nullptr;}
     PyString_Concat(&result,element.borrow());
     if (!result) return nullptr;
-    PyString_Concat(&result,ARROW);
-    if (!result) return nullptr;
-    PyObject* tail = string(cxx->parameter2);
-    if (!tail) {Py_DECREF(result); return nullptr;}
-    PyString_ConcatAndDel(&result,tail);
+    if (cxx->parameter2.lock()) {
+      PyString_Concat(&result,ARROW);
+      if (!result) return nullptr;
+      PyObject* tail = string(cxx->parameter2);
+      if (!tail) {Py_DECREF(result); return nullptr;}
+      PyString_ConcatAndDel(&result,tail);
+    }
     return result;
   }
 
+  case IF_Function:
+    PyOwned inputs(type::string(cxx->parameter1));
+    if (!inputs) return nullptr;
+    PyOwned outputs(type::string(cxx->parameter2));
+    if (!outputs) return nullptr;
+    return PyString_FromFormat("%s[%s returns %s]",flavor[cxx->code],PyString_AS_STRING(inputs.borrow()),PyString_AS_STRING(outputs.borrow()));
   }
 
-  return PyErr_Format(PyExc_NotImplementedError,"type code %ld not done yet",cxx->code);
+
+  return PyErr_Format(PyExc_NotImplementedError,"unknown type code %ld",cxx->code);
 }
 
 type::type(python* self, PyObject* args,PyObject* kwargs)

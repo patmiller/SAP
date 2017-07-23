@@ -655,13 +655,13 @@ T 8 8 2 7
         self.assertIs(empty,None)
 
         c1 = m.addtypechain(I,I,R,I,code=IF_Tuple)
-        self.assertEqual(str(c1),"int->int->real->int->")
+        self.assertEqual(str(c1),"int->int->real->int")
 
         s1 = m.addtypechain(I,I,code=IF_Field)
-        self.assertEqual(str(s1),"int->int->")
+        self.assertEqual(str(s1),"int->int")
 
         u1 = m.addtypechain(I,R,code=IF_Tag)
-        self.assertEqual(str(u1),"int->real->")
+        self.assertEqual(str(u1),"int->real")
 
         self.assertEqual(m.if1,'''T 1 1 3 %na=int
 T 2 1 5 %na=real
@@ -687,18 +687,30 @@ T 10 7 1 9
         m = sap.if1.Module()
         s = m.addtype(sap.if1.IF_Record,
                       m.addtypechain(m.integer,m.real,code=sap.if1.IF_Field))
-        self.assertEqual(str(s),'record[integer->real->]')
+        self.assertEqual(str(s),'record[integer->real]')
         self.assertEqual(s.chain(),(m.integer,m.real))
         u = m.addtype(sap.if1.IF_Union,
                       m.addtypechain(m.integer,m.real,code=sap.if1.IF_Tag))
-        self.assertEqual(str(u),'union[integer->real->]')
+        self.assertEqual(str(u),'union[integer->real]')
         self.assertEqual(u.chain(),(m.integer,m.real))
         return
 
     def test_chainname(self):
         m = sap.if1.Module()
         c = m.addtypechain(m.integer,m.integer,m.real,code=sap.if1.IF_Tuple,names=('aa','bb','cc'))
-        self.assertEqual(str(c),'aa:integer->bb:integer->cc:real->')
+        self.assertEqual(str(c),'aa:integer->bb:integer->cc:real')
+        return
+
+    def test_functiontype(self):
+        m = sap.if1.Module()
+        ins = m.addtypechain(m.integer,m.real)
+        outs = m.addtypechain(m.real)
+        f0 = m.addtype(sap.if1.IF_Function,ins,outs)
+        self.assertEqual(str(f0),'function[integer->real returns real]')
+
+        f1 = m.addtype(sap.if1.IF_Function,None,outs)
+        self.assertEqual(str(f1),'function[ returns real]')
+
         return
 
 if __name__ == '__main__':

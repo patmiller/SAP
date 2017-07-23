@@ -100,8 +100,16 @@ PyObject* module::addtype(PyObject* self,PyObject* args,PyObject* kwargs) {
     n = std::make_shared<type>(code,aux,p1,p2)->connect(cxx,name);
     break;
 
+  case IF_Function:
+    p1 = fixtype(o1,nullptr);
+    if (!p1 && PyErr_Occurred()) return nullptr;
+    p2 = fixtype(o2,"outputs");
+    if (!p2) return nullptr;
+    n = std::make_shared<type>(code,aux,p1,p2)->connect(cxx,name);
+    break;
+
   default:
-    return PyErr_Format(PyExc_NotImplementedError,"fix code %ld",code);
+    return PyErr_Format(PyExc_NotImplementedError,"invalid type code %ld",code);
   }
     
   if (n < 0) return nullptr;
@@ -117,6 +125,11 @@ PyObject* module::addtypechain(PyObject* self,PyObject* args,PyObject* kwargs) {
   STATIC_STR(NAME,"name");
   STATIC_STR(NAMES,"names");
   STATIC_STR(ADDTYPE,"addtype");
+  static PyObject* default_code = nullptr;
+  if (!default_code) {
+    default_code = PyInt_FromLong(IF_Tuple);
+    if (!default_code) return nullptr;
+  }
 
   ssize_t n = PyTuple_GET_SIZE(args);
   // If we have no entries, just return None
@@ -127,8 +140,9 @@ PyObject* module::addtypechain(PyObject* self,PyObject* args,PyObject* kwargs) {
 
   // Make sure we have a type code and the optional names
   PyObject* code = (kwargs)?PyDict_GetItem(kwargs,CODE):nullptr;
-  if (!(code && PyInt_Check(code))) {
-    return PyErr_Format(PyExc_TypeError,"integer code is required");
+  if (!code) code = default_code;
+  if (!PyInt_Check(code)) {
+    return PyErr_Format(PyExc_TypeError,"code must be an integer");
   }
   PyObject* names = (kwargs)?PyDict_GetItem(kwargs,NAMES):nullptr;
   PyOwned name;
