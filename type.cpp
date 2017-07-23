@@ -16,8 +16,42 @@ PyTypeObject type::Type;
 char const* type::doc = "TBD Type";
 
 PyMethodDef type::methods[] = {
+  {(char*)"chain",type::chain,METH_VARARGS,(char*)"TBD: chain chain"},
   {nullptr}
 };
+
+PyObject* type::chain(PyObject* self, PyObject* args) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+
+  switch(cxx->code) {
+  case IF_Field:
+  case IF_Tag:
+  case IF_Tuple:
+    break;
+
+  case IF_Record:
+  case IF_Union:
+    cxx = cxx->parameter1.lock();
+    break;
+
+  default:
+    return PyErr_Format(PyExc_TypeError,"unchainable type");
+  }
+
+  // How many?
+  ssize_t n = 0;
+  for(auto p=cxx; p; p = p->parameter2.lock()) n++;
+
+  PyOwned result(PyTuple_New(n));
+  if (!result) return nullptr;
+  ssize_t i = 0;
+  for(auto p=cxx; p; p = p->parameter2.lock()) {
+    PyObject* T /*owned*/ = p->parameter1.lock()->lookup();
+    PyTuple_SET_ITEM(result.borrow(),i,T);
+    ++i;
+  }
+  return result.incref();
+}
 
 PyGetSetDef type::getset[] = {
   {(char*)"code",type::get_code,nullptr,(char*)"type code",nullptr},
@@ -161,6 +195,8 @@ PyObject* type::string(std::weak_ptr<type>& weak) {
 }
 PyObject* type::string(PyObject*,std::shared_ptr<type>& cxx) {
   STATIC_STR(ARROW,"->");
+  STATIC_STR(NA,"na");
+  STATIC_STR(COLON,":");
   static const char* flavor[] = {"array","basic","field","function","multiple","record","stream","tag","tuple","union"};
 
   // If this type has a name, use it (not for tuple, field, tag)
@@ -170,14 +206,11 @@ PyObject* type::string(PyObject*,std::shared_ptr<type>& cxx) {
   }
 
   switch(cxx->code) {
-  case IF_Record:
-  case IF_Union: {
-    break;
-  }
-
   case IF_Array:
   case IF_Multiple:
-  case IF_Stream: {
+  case IF_Record:
+  case IF_Stream:
+  case IF_Union:{
     PyOwned basestring(type::string(cxx->parameter1));
     if (!basestring) return nullptr;
     return PyString_FromFormat("%s[%s]",flavor[cxx->code],PyString_AS_STRING(basestring.borrow()));
@@ -193,16 +226,27 @@ PyObject* type::string(PyObject*,std::shared_ptr<type>& cxx) {
   case IF_Field:
   case IF_Tag:
   case IF_Tuple: {
+    PyObject* name = PyDict_GetItem(cxx->pragmas.borrow(),NA);
+    PyOwned answer(PyString_FromString(""));
+    PyObject* result = answer.incref();
+    if (name) {
+      PyString_Concat(&result,name);
+      if (!result) return nullptr;
+      PyString_Concat(&result,COLON);
+      if (!result) return nullptr;
+    }
     PyOwned element(string(cxx->parameter1));
-    if (!element) return nullptr;
-    PyObject* result = element.incref();
+    if (!element) {Py_DECREF(result); return nullptr;}
+    PyString_Concat(&result,element.borrow());
+    if (!result) return nullptr;
     PyString_Concat(&result,ARROW);
     if (!result) return nullptr;
     PyObject* tail = string(cxx->parameter2);
+    if (!tail) {Py_DECREF(result); return nullptr;}
     PyString_ConcatAndDel(&result,tail);
     return result;
   }
-    
+
   }
 
   return PyErr_Format(PyExc_NotImplementedError,"type code %ld not done yet",cxx->code);

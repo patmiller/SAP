@@ -15,7 +15,7 @@
 class PyOwned {
   PyObject* P = nullptr;
  public:
-  explicit PyOwned(PyObject* P) : P(P) {}
+  explicit PyOwned(PyObject* P=nullptr) : P(P) {}
   PyOwned(PyOwned const&) = delete;
   PyOwned& operator=(PyOwned const&) = delete;
   PyOwned& operator=(PyObject* N) {

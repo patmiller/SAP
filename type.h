@@ -38,6 +38,7 @@ class type : public IF1<type> {
   static PyObject* get_if1(PyObject*,void*);
   static PyObject* get_label(PyObject*,void*);
 
+  static PyObject* chain(PyObject*,PyObject*);
 
   type();
   type(python* self, PyObject* args,PyObject* kwargs);  

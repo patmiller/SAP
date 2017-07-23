@@ -8,12 +8,12 @@ char const* module::doc = "TBD Module";
 
 PyMethodDef module::methods[] = {
   {(char*)"addtype",(PyCFunction)module::addtype,METH_VARARGS|METH_KEYWORDS,"add a type"},
+    {(char*)"addtypechain",(PyCFunction)module::addtypechain,METH_VARARGS|METH_KEYWORDS,"create a type chain (tuple, tags, fields)"},
   {(char*)"addfunction",module::addfunction,METH_VARARGS,"add a new function"},
   {nullptr}
 };
 
 PyObject* module::addtype(PyObject* self,PyObject* args,PyObject* kwargs) {
-  STATIC_STR(AUX,"aux");
   STATIC_STR(NAME,"name");
 
   // Required argument/s
@@ -76,7 +76,9 @@ PyObject* module::addtype(PyObject* self,PyObject* args,PyObject* kwargs) {
     break;
   case IF_Array:
   case IF_Multiple:
+  case IF_Record:
   case IF_Stream:
+  case IF_Union:
     if (!o1) {
       return PyErr_Format(PyExc_TypeError,"missing base type arg");
     }
@@ -88,6 +90,8 @@ PyObject* module::addtype(PyObject* self,PyObject* args,PyObject* kwargs) {
     n = std::make_shared<type>(code,aux,p1)->connect(cxx,name);
     break;
 
+  case IF_Field:
+  case IF_Tag:
   case IF_Tuple:
     p1 = fixtype(o1,"entry");
     if (!p1) return nullptr;
@@ -95,6 +99,7 @@ PyObject* module::addtype(PyObject* self,PyObject* args,PyObject* kwargs) {
     if (!p2 && PyErr_Occurred()) return nullptr;
     n = std::make_shared<type>(code,aux,p1,p2)->connect(cxx,name);
     break;
+
   default:
     return PyErr_Format(PyExc_NotImplementedError,"fix code %ld",code);
   }
@@ -105,6 +110,51 @@ PyObject* module::addtype(PyObject* self,PyObject* args,PyObject* kwargs) {
   PyObject* T = PyList_GET_ITEM(cxx->types.borrow(),n);
   Py_INCREF(T);
   return T;
+}
+
+PyObject* module::addtypechain(PyObject* self,PyObject* args,PyObject* kwargs) {
+  STATIC_STR(CODE,"code");
+  STATIC_STR(NAME,"name");
+  STATIC_STR(NAMES,"names");
+  STATIC_STR(ADDTYPE,"addtype");
+
+  ssize_t n = PyTuple_GET_SIZE(args);
+  // If we have no entries, just return None
+  if (n == 0) {
+    Py_INCREF(Py_None);
+    return Py_None;
+  }
+
+  // Make sure we have a type code and the optional names
+  PyObject* code = (kwargs)?PyDict_GetItem(kwargs,CODE):nullptr;
+  if (!(code && PyInt_Check(code))) {
+    return PyErr_Format(PyExc_TypeError,"integer code is required");
+  }
+  PyObject* names = (kwargs)?PyDict_GetItem(kwargs,NAMES):nullptr;
+  PyOwned name;
+  if (names) {
+    PyOwned iter(PyObject_GetIter(names));
+    if (!iter) return nullptr;
+    if (PyDict_SetItem(kwargs,NAMES,iter.borrow()) < 0) {
+      return nullptr;
+    }
+    name = PyIter_Next(iter.borrow());
+    if (!name) return nullptr;
+  }
+
+  PyObject* T = PyTuple_GET_ITEM(args,0);
+  PyOwned rest(PyTuple_GetSlice(args,1,n));
+  if (!rest) return nullptr;
+
+  PyOwned next(addtypechain(self,rest.borrow(),kwargs));
+  if (!next) return nullptr;
+
+  PyOwned result(PyObject_CallMethodObjArgs(self,ADDTYPE,code,T,next.borrow(),nullptr));
+  if (!result) return nullptr;
+  if (name) {
+    if (PyObject_SetAttr(result.borrow(),NAME,name.borrow()) < 0) return nullptr;
+  }
+  return result.incref();
 }
 
 PyObject* module::addfunction(PyObject* self,PyObject* args) {

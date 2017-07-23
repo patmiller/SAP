@@ -645,9 +645,63 @@ T 8 8 2 7
 ''')
         return
 
+    def test_typechain(self):
+        m = sap.if1.Module('')
+        from sap.if1 import IF_Basic,IF_Integer,IF_Real
+        from sap.if1 import IF_Tuple,IF_Field,IF_Tag
+        I = m.addtype(IF_Basic,IF_Integer,name="int")
+        R = m.addtype(IF_Basic,IF_Real,name="real")
+        empty = m.addtypechain(code=IF_Tuple)
+        self.assertIs(empty,None)
+
+        c1 = m.addtypechain(I,I,R,I,code=IF_Tuple)
+        self.assertEqual(str(c1),"int->int->real->int->")
+
+        s1 = m.addtypechain(I,I,code=IF_Field)
+        self.assertEqual(str(s1),"int->int->")
+
+        u1 = m.addtypechain(I,R,code=IF_Tag)
+        self.assertEqual(str(u1),"int->real->")
+
+        self.assertEqual(m.if1,'''T 1 1 3 %na=int
+T 2 1 5 %na=real
+T 3 8 1 0
+T 4 8 2 3
+T 5 8 1 4
+T 6 8 1 5
+T 7 2 1 0
+T 8 2 1 7
+T 9 7 2 0
+T 10 7 1 9
+''')
+
+        self.assertEqual(c1.chain(),(I,I,R,I))
+        self.assertEqual(s1.chain(),(I,I))
+        self.assertEqual(u1.chain(),(I,R))
+
+        self.assertIs(c1.parameter1,I)
+        self.assertEqual(c1.parameter2.chain(),(I,R,I))
+        return
+
+    def test_struct_union(self):
+        m = sap.if1.Module()
+        s = m.addtype(sap.if1.IF_Record,
+                      m.addtypechain(m.integer,m.real,code=sap.if1.IF_Field))
+        self.assertEqual(str(s),'record[integer->real->]')
+        self.assertEqual(s.chain(),(m.integer,m.real))
+        u = m.addtype(sap.if1.IF_Union,
+                      m.addtypechain(m.integer,m.real,code=sap.if1.IF_Tag))
+        self.assertEqual(str(u),'union[integer->real->]')
+        self.assertEqual(u.chain(),(m.integer,m.real))
+        return
+
+    def test_chainname(self):
+        m = sap.if1.Module()
+        c = m.addtypechain(m.integer,m.integer,m.real,code=sap.if1.IF_Tuple,names=('aa','bb','cc'))
+        self.assertEqual(str(c),'aa:integer->bb:integer->cc:real->')
+        return
+
 if __name__ == '__main__':
-    import sap.jjj
-    sap.if1 = sap.jjj
     unittest.main()
 
 

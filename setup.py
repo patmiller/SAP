@@ -9,15 +9,9 @@ setup(name='SAP',
       license='BSD 3-clause',
       ext_modules=[
           Extension('sap.if1',
-                    ['if1.cpp'],
+                    ['type.cpp','module.cpp','graph.cpp','if1.cpp','node.cpp','inport.cpp','outport.cpp'],
                     extra_compile_args=['-std=c++11'],
-                    depends=['IFX.h'],
-          ),
-
-          Extension('sap.jjj',
-                    ['type.cpp','module.cpp','graph.cpp','jjj.cpp','node.cpp','inport.cpp','outport.cpp'],
-                    extra_compile_args=['-std=c++11'],
-                    depends=['IFX.h','module.h','type.h','node.h','graph.h','inport.h','outport.h'],
+                    #depends=['IFX.h','module.h','type.h','node.h','graph.h','inport.h','outport.h'],
           ),
       ],
       )
