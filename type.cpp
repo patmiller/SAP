@@ -106,7 +106,9 @@ PyObject* type::get_if1(PyObject* self,void*) {
   case IF_Stream:
   case IF_Union: {
     std::shared_ptr<type> parameter1 = cxx->parameter1.lock();
-    long p1 = *parameter1;
+    long p1 = 0;
+    if (parameter1) p1 = *parameter1;
+
     result = PyString_FromFormat("T %ld %ld %ld",label,cxx->code,p1);
     if (!result) return nullptr;
     break;
@@ -115,9 +117,13 @@ PyObject* type::get_if1(PyObject* self,void*) {
     // Two parameter case for the rest
   default: {
     std::shared_ptr<type> parameter1 = cxx->parameter1.lock();
-    long p1 = *parameter1;
+    long p1 = 0;
+    if (parameter1) p1 = *parameter1;
+
     std::shared_ptr<type> parameter2 = cxx->parameter2.lock();
-    long p2 = *parameter2;
+    long p2 = 0;
+    if (parameter2) p2 = *parameter2;
+
     result = PyString_FromFormat("T %ld %ld %ld %ld",label,cxx->code,p1,p2);
     if (!result) return nullptr;
   }    
@@ -146,7 +152,15 @@ PyObject* type::get_label(PyObject* self,void*) {
   return PyInt_FromLong(*cxx);
 }
 
+PyObject* type::string(std::weak_ptr<type>& weak) {
+  auto T = weak.lock();
+  if (!T) {
+    return PyString_FromString("");
+  }
+  return string(nullptr,T);
+}
 PyObject* type::string(PyObject*,std::shared_ptr<type>& cxx) {
+  STATIC_STR(ARROW,"->");
   static const char* flavor[] = {"array","basic","field","function","multiple","record","stream","tag","tuple","union"};
 
   // If this type has a name, use it (not for tuple, field, tag)
@@ -159,23 +173,12 @@ PyObject* type::string(PyObject*,std::shared_ptr<type>& cxx) {
   case IF_Record:
   case IF_Union: {
     break;
-#if 0
-    PyObject* basetype /*borrowed*/ = PyWeakref_GET_OBJECT(self->weak1);
-    if (basetype == Py_None) return PyErr_Format(PyExc_RuntimeError,"disconnected structure");
-    PyObject* base /*owned*/ = PyObject_Str(basetype);
-    if (!base) return nullptr;
-    PyObject* result = PyString_FromFormat("%s%s",flavor[self->code],PyString_AS_STRING(base));
-    Py_DECREF(base);
-    return result;
-#endif
   }
 
   case IF_Array:
   case IF_Multiple:
   case IF_Stream: {
-    auto base = cxx->parameter1.lock();
-    if (!base) return PyErr_Format(PyExc_RuntimeError,"malformed %s",flavor[cxx->code]);
-    PyOwned basestring(type::string(nullptr,base));
+    PyOwned basestring(type::string(cxx->parameter1));
     if (!basestring) return nullptr;
     return PyString_FromFormat("%s[%s]",flavor[cxx->code],PyString_AS_STRING(basestring.borrow()));
   }
@@ -183,67 +186,21 @@ PyObject* type::string(PyObject*,std::shared_ptr<type>& cxx) {
   case IF_Basic:
     return PyString_FromFormat("Basic(%ld)",cxx->aux);
 
+  case IF_Wild: {
+    return PyString_FromString("wild");
+  }
+
   case IF_Field:
   case IF_Tag:
   case IF_Tuple: {
-    break;
-#if 0
-    PyObject* result /*owned*/ = PyString_FromString("");
+    PyOwned element(string(cxx->parameter1));
+    if (!element) return nullptr;
+    PyObject* result = element.incref();
+    PyString_Concat(&result,ARROW);
     if (!result) return nullptr;
-    PyString_Concat(&result,LPAREN);
-    if (!result) return nullptr;
-
-    for(;self;) {
-      PyObject* name /*borrowed*/= PyDict_GetItemString(self->pragmas,"na");
-      if (name) {
-        PyObject* fname = PyObject_Str(name);
-        if (!fname) { Py_DECREF(result); return nullptr; }
-        PyString_ConcatAndDel(&result,fname);
-        if (!result) return nullptr;
-        PyString_Concat(&result,COLON);
-        if (!result) return nullptr;
-      }
-
-      PyObject* elementtype /*borrowed*/ = PyWeakref_GET_OBJECT(self->weak1);
-      if (elementtype == Py_None) return PyErr_Format(PyExc_RuntimeError,"disconnected tuple element type");
-
-      PyObject* element /*owned*/ = PyObject_Str(elementtype);
-      if (!element) return nullptr;
-
-      PyString_ConcatAndDel(&result,element);
-      if (!result) return nullptr;
-
-      PyObject* next = self->weak2?PyWeakref_GET_OBJECT(self->weak2):nullptr;
-      if (next == Py_None) return PyErr_Format(PyExc_RuntimeError,"disconnected tuple element link");
-      self = reinterpret_cast<IF1_TypeObject*>(next);
-      if (self) PyString_Concat(&result,COMMA);
-      if (!result) return nullptr;
-    }
-    PyString_Concat(&result,RPAREN);
+    PyObject* tail = string(cxx->parameter2);
+    PyString_ConcatAndDel(&result,tail);
     return result;
-#endif
-  }
-  case IF_Function: {
-    break;
-#if 0
-    PyObject* intype = (self->weak1)?PyWeakref_GET_OBJECT(self->weak1):nullptr;
-    if (intype == Py_None) return PyErr_Format(PyExc_RuntimeError,"disconnected function input");
-
-    PyObject* outtype = PyWeakref_GET_OBJECT(self->weak2);
-    if (outtype == Py_None) return PyErr_Format(PyExc_RuntimeError,"disconnected function output");
-
-    PyObject* ins /*owned*/ = (intype)?PyObject_Str(intype):PyString_FromString("");
-    if (!ins) return nullptr;
-    PyObject* outs /*owned*/ = PyObject_Str(outtype);
-    if (!outs) { Py_DECREF(ins); return nullptr; }
-
-    PyString_Concat(&ins,ARROW);
-    PyString_ConcatAndDel(&ins,outs);
-    return ins;
-#endif
-  }
-  case IF_Wild: {
-    return PyString_FromString("wild");
   }
     
   }
@@ -284,7 +241,6 @@ ssize_t type::connect(std::shared_ptr<module>& module,char const* name) {
 	p->aux == aux &&
 	p->parameter1.lock() == parameter1.lock() &&
 	p->parameter2.lock() == parameter2.lock()) {
-      printf("Found match at location %zd\n",i);
       return i;
     }
   }

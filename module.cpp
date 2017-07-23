@@ -16,27 +16,19 @@ PyObject* module::addtype(PyObject* self,PyObject* args,PyObject* kwargs) {
   STATIC_STR(AUX,"aux");
   STATIC_STR(NAME,"name");
 
+  // Required argument/s
   auto cxx = reinterpret_cast<python*>(self)->cxx;
-
-  // The code argument is required
-  if (PyTuple_GET_SIZE(args) < 1 ) {
-    return PyErr_Format(PyExc_TypeError,"must provide a typecode");
+  long code;
+  PyObject* o1 = nullptr;
+  PyObject* o2 = nullptr;
+  if (!PyArg_ParseTuple(args,"l|OO",&code,&o1,&o2)) {
+    return nullptr;
   }
-  PyObject* o /*borrowed*/ = PyTuple_GET_ITEM(args,0);
-  if (!PyInt_Check(o)) {
-    return PyErr_Format(PyExc_TypeError,"typecode must be an integer");
-  }
-  long code = PyInt_AS_LONG(o);
 
-  long aux=0;
+  // Some are optionals
   char const* name = nullptr;
   if (kwargs) {
-    PyObject* optAux = PyDict_GetItem(kwargs,AUX);
     PyObject* optName = PyDict_GetItem(kwargs,NAME);
-    if ( optAux ) {
-      aux = PyInt_AsLong(optAux);
-      if (aux < 0 && PyErr_Occurred()) return nullptr;
-    }
     if (optName) {
       if (!PyString_Check(optName)) {
 	return PyErr_Format(PyExc_TypeError,"name must be a string");
@@ -45,43 +37,68 @@ PyObject* module::addtype(PyObject* self,PyObject* args,PyObject* kwargs) {
     }
   }
 
+  // The p1/p2 may be missing (nullptr), Py_None, or a type
+  auto fixtype = [](PyObject* o,char const* required) {
+    std::shared_ptr<type> answer;
+    if (o) {
+      if (PyObject_TypeCheck(o,&type::Type)) {
+	answer = reinterpret_cast<type::python*>(o)->cxx;
+      } else if (o != Py_None) {
+	PyErr_SetString(PyExc_TypeError,"bad type");
+      }
+    }
+    if (!answer && required) {
+      PyErr_Format(PyExc_TypeError,"%s is required here",required);
+    }
+    return answer;
+  };
+
   ssize_t n = 0;
   std::shared_ptr<type> p1,p2;
+  long aux = 0;
   switch(code) {
   case IF_Wild:
+    if (o1 || o2) {
+      return PyErr_Format(PyExc_TypeError,"invalid extra args");
+    }
     n = std::make_shared<type>(code)->connect(cxx,name);
     break;
   case IF_Basic:
+    if (!o1) {
+      return PyErr_Format(PyExc_TypeError,"missing aux arg");
+    }
+    if (o2) {
+      return PyErr_Format(PyExc_TypeError,"invalid extra arg");
+    }
+    aux = PyInt_AsLong(o1);
+    if (aux < 0 && PyErr_Occurred()) return nullptr;
     n = std::make_shared<type>(code,aux)->connect(cxx,name);
     break;
   case IF_Array:
   case IF_Multiple:
   case IF_Stream:
-    if (PyTuple_GET_SIZE(args) != 2 ) {
-      return PyErr_Format(PyExc_TypeError,"requires exactly 2 args");
+    if (!o1) {
+      return PyErr_Format(PyExc_TypeError,"missing base type arg");
     }
-    o = PyTuple_GET_ITEM(args,1);
-    if (!PyObject_TypeCheck(o,&type::Type)) {
-      return PyErr_Format(PyExc_TypeError,"parameter1 must be a type");
+    if (o2) {
+      return PyErr_Format(PyExc_TypeError,"invalid extra arg");
     }
-    p1 = reinterpret_cast<type::python*>(o)->cxx;
+    p1 = fixtype(o1,"base type");
+    if (!p1) return nullptr;
     n = std::make_shared<type>(code,aux,p1)->connect(cxx,name);
+    break;
+
+  case IF_Tuple:
+    p1 = fixtype(o1,"entry");
+    if (!p1) return nullptr;
+    p2 = fixtype(o2,nullptr);
+    if (!p2 && PyErr_Occurred()) return nullptr;
+    n = std::make_shared<type>(code,aux,p1,p2)->connect(cxx,name);
     break;
   default:
     return PyErr_Format(PyExc_NotImplementedError,"fix code %ld",code);
   }
     
-  // The p1/p2 must be missing (nullptr), Py_None, a type, or a tuple
-  auto fixtype = [](PyObject* o) {
-    if (!o || o == Py_None) {
-      return std::shared_ptr<type>(nullptr);
-    }
-    if (PyObject_TypeCheck(o,&type::Type)) {
-      return reinterpret_cast<type::python*>(o)->cxx;
-    }
-    throw PyErr_Format(PyExc_TypeError,"parameter must be empty, None, a type object, or a tuple");
-  };
-
   if (n < 0) return nullptr;
 
   // Fetch that item from our list (previous version or newly created)

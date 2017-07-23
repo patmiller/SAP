@@ -23,6 +23,7 @@ class type : public IF1<type> {
   static void setup();
 
   static PyObject* string(PyObject*,std::shared_ptr<type>&);
+  static PyObject* string(std::weak_ptr<type>&);
   operator long();
 
   static PyObject* nb_int(PyObject*);

@@ -11,7 +11,7 @@
 boolean
 >>> m.integer
 integer
->>> r = m.addtype(IF_Basic,aux=3) # doesn't make a new type!
+>>> r = m.addtype(IF_Basic,3) # doesn't make a new type!
 >>> r is m.integer
 True
 >>> m.pragmas['C'] = 'IF1 Check'
@@ -588,7 +588,7 @@ C$  F Python frontend
         m = sap.if1.Module()
 
         # If we re-add an existing type, we get the same type back
-        T = m.addtype(sap.if1.IF_Basic,aux=sap.if1.IF_Integer)
+        T = m.addtype(sap.if1.IF_Basic,sap.if1.IF_Integer)
         self.assertIs(T,m.integer)
 
         # We can delete a type (auto renumbered)
@@ -598,7 +598,7 @@ C$  F Python frontend
         self.assertNotIn(m.integer,m.types)
 
         # Now, we create one like it and it is inserted
-        T = m.addtype(sap.if1.IF_Basic,aux=sap.if1.IF_Integer)
+        T = m.addtype(sap.if1.IF_Basic,sap.if1.IF_Integer)
         T.name = 'int'
         self.assertIn(T,m.types)
 
@@ -622,22 +622,26 @@ T 9 1 3 %na=int
         W = m.addtype(sap.if1.IF_Wild,name="crazy")
         self.assertEqual(W.label,1)
 
-        I = m.addtype(sap.if1.IF_Basic,aux=sap.if1.IF_Integer)
+        I = m.addtype(sap.if1.IF_Basic,sap.if1.IF_Integer)
         self.assertEqual(I.label,2)
-        R = m.addtype(sap.if1.IF_Basic,aux=sap.if1.IF_Real)
+        R = m.addtype(sap.if1.IF_Basic,sap.if1.IF_Real)
         self.assertEqual(R.label,3)
 
         m.addtype(sap.if1.IF_Array,I)
         m.addtype(sap.if1.IF_Multiple,I)
         m.addtype(sap.if1.IF_Stream,I)
 
-        print m.if1
+        t0 = m.addtype(sap.if1.IF_Tuple,I)
+        t1 = m.addtype(sap.if1.IF_Tuple,I,t0)
+
         self.assertEqual(m.if1,'''T 1 10 %na=crazy
 T 2 1 3
 T 3 1 5
 T 4 0 2
 T 5 4 2
 T 6 6 2
+T 7 8 2 0
+T 8 8 2 7
 ''')
         return
 
