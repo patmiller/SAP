@@ -191,33 +191,33 @@ PyObject* type::string(std::weak_ptr<type>& weak) {
   if (!T) {
     return PyString_FromString("");
   }
-  return string(nullptr,T);
+  return T->string(nullptr);
 }
-PyObject* type::string(PyObject*,std::shared_ptr<type>& cxx) {
+PyObject* type::string(PyObject*) {
   STATIC_STR(ARROW,"->");
   STATIC_STR(NA,"na");
   STATIC_STR(COLON,":");
   static const char* flavor[] = {"array","basic","field","function","multiple","record","stream","tag","tuple","union"};
 
   // If this type has a name, use it (not for tuple, field, tag)
-  if (cxx->code != IF_Tuple && cxx->code != IF_Field && cxx->code != IF_Tag) {
-    PyObject* na = PyDict_GetItemString(cxx->pragmas.borrow(),"na");
+  if (code != IF_Tuple && code != IF_Field && code != IF_Tag) {
+    PyObject* na = PyDict_GetItemString(pragmas.borrow(),"na");
     if (na) { Py_INCREF(na); return na; }
   }
 
-  switch(cxx->code) {
+  switch(code) {
   case IF_Array:
   case IF_Multiple:
   case IF_Record:
   case IF_Stream:
   case IF_Union:{
-    PyOwned basestring(type::string(cxx->parameter1));
+    PyOwned basestring(type::string(parameter1));
     if (!basestring) return nullptr;
-    return PyString_FromFormat("%s[%s]",flavor[cxx->code],PyString_AS_STRING(basestring.borrow()));
+    return PyString_FromFormat("%s[%s]",flavor[code],PyString_AS_STRING(basestring.borrow()));
   }
 
   case IF_Basic:
-    return PyString_FromFormat("Basic(%ld)",cxx->aux);
+    return PyString_FromFormat("Basic(%ld)",aux);
 
   case IF_Wild: {
     return PyString_FromString("wild");
@@ -226,7 +226,7 @@ PyObject* type::string(PyObject*,std::shared_ptr<type>& cxx) {
   case IF_Field:
   case IF_Tag:
   case IF_Tuple: {
-    PyObject* name = PyDict_GetItem(cxx->pragmas.borrow(),NA);
+    PyObject* name = PyDict_GetItem(pragmas.borrow(),NA);
     PyOwned answer(PyString_FromString(""));
     PyObject* result = answer.incref();
     if (name) {
@@ -235,14 +235,14 @@ PyObject* type::string(PyObject*,std::shared_ptr<type>& cxx) {
       PyString_Concat(&result,COLON);
       if (!result) return nullptr;
     }
-    PyOwned element(string(cxx->parameter1));
+    PyOwned element(string(parameter1));
     if (!element) {Py_DECREF(result); return nullptr;}
     PyString_Concat(&result,element.borrow());
     if (!result) return nullptr;
-    if (cxx->parameter2.lock()) {
+    if (parameter2.lock()) {
       PyString_Concat(&result,ARROW);
       if (!result) return nullptr;
-      PyObject* tail = string(cxx->parameter2);
+      PyObject* tail = string(parameter2);
       if (!tail) {Py_DECREF(result); return nullptr;}
       PyString_ConcatAndDel(&result,tail);
     }
@@ -250,15 +250,15 @@ PyObject* type::string(PyObject*,std::shared_ptr<type>& cxx) {
   }
 
   case IF_Function:
-    PyOwned inputs(type::string(cxx->parameter1));
+    PyOwned inputs(type::string(parameter1));
     if (!inputs) return nullptr;
-    PyOwned outputs(type::string(cxx->parameter2));
+    PyOwned outputs(type::string(parameter2));
     if (!outputs) return nullptr;
-    return PyString_FromFormat("%s[%s returns %s]",flavor[cxx->code],PyString_AS_STRING(inputs.borrow()),PyString_AS_STRING(outputs.borrow()));
+    return PyString_FromFormat("%s[%s returns %s]",flavor[code],PyString_AS_STRING(inputs.borrow()),PyString_AS_STRING(outputs.borrow()));
   }
 
 
-  return PyErr_Format(PyExc_NotImplementedError,"unknown type code %ld",cxx->code);
+  return PyErr_Format(PyExc_NotImplementedError,"unknown type code %ld",code);
 }
 
 type::type(python* self, PyObject* args,PyObject* kwargs)

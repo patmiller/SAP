@@ -153,9 +153,10 @@ public:
 
   static PyObject* str(PyObject* self) {
     auto cxx = reinterpret_cast<python*>(self)->cxx;
-    return T::string(self,cxx);
+    if (!cxx) return PyErr_Format(PyExc_RuntimeError,"broken ptr");
+    return cxx->string(self);
   }
-  static PyObject* string(PyObject* self,std::shared_ptr<T>&) {
+  virtual PyObject* string(PyObject* self) {
     char const* dot = ::rindex(self->ob_type->tp_name,'.');
     return PyString_FromFormat("<%s>",dot?(dot+1):self->ob_type->tp_name);
   }

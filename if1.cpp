@@ -120,5 +120,32 @@ initif1(void) {
   PyModule_AddIntMacro(m,IFXGraph);
   PyModule_AddIntMacro(m,IFLPGraph);
   PyModule_AddIntMacro(m,IFRLGraph);
+
+  // Build the opcode map for Python and for node.cpp
+  PyOwned o2n(PyDict_New());
+  if (!o2n) return;
+  PyOwned n2o(PyDict_New());
+  if (!n2o) return;
+  PyObject* dict = PyModule_GetDict(m);
+  PyObject* key;
+  PyObject* value;
+  Py_ssize_t pos = 0;
+  while (PyDict_Next(dict, &pos, &key, &value)) {
+    if (PyString_Check(key) && PyInt_Check(value) &&
+	PyString_AS_STRING(key)[0] == 'I' &&
+	PyString_AS_STRING(key)[1] == 'F' &&
+	PyString_AS_STRING(key)[2] != '_') {
+      long opcode = PyInt_AS_LONG(value);
+      char const* name = PyString_AS_STRING(key)+2;
+      nodebase::opcode_to_name[opcode] = name;
+      nodebase::name_to_opcode[name] = opcode;
+      PyOwned nm(PyString_FromString(name));
+      PyDict_SetItem(o2n.borrow(),value,nm.borrow());
+      PyDict_SetItem(n2o.borrow(),nm.borrow(),value);
+    }
+  }
+
+  PyModule_AddObject(m,"opnames",o2n.incref());
+  PyModule_AddObject(m,"opcodes",n2o.incref());
 }
 //(insert "\n" (shell-command-to-string "awk '/ IF/{printf \"PyModule_AddIntMacro(m,%s);\\n\", $1}' IFX.h"))

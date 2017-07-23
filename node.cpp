@@ -1,5 +1,8 @@
 #include "node.h"
 
+std::map<long,std::string> nodebase::opcode_to_name;
+std::map<std::string,long> nodebase::name_to_opcode;
+
 PyTypeObject node::Type;
 
 char const* node::doc = "TBD Node";
@@ -41,14 +44,21 @@ PyObject* node::get_outputs(PyObject* pySelf,void*) {
   return PyErr_Format(PyExc_NotImplementedError,"get_outputs");
 }
 
-node:: node(python* self, PyObject* args,PyObject* kwargs)
+PyObject* node::string(PyObject*) {
+  return nodebase::string();
+}
+
+node::node(python* self, PyObject* args,PyObject* kwargs)
+{
+  throw PyErr_Format(PyExc_TypeError,"Cannot create new nodes this way.  see Graph.addnode()");
+}
+
+node::node(long opcode, std::shared_ptr<nodebase> parent)
+  : nodebase(opcode,parent)
 {
 }
 
-// TODO: chain c'tor
-node:: node()
-{
-}
+
 
 PyNumberMethods node::as_number;
 PySequenceMethods node::as_sequence;

@@ -713,9 +713,21 @@ T 10 7 1 9
 
         return
 
+    def test_barefunction(self):
+        m = sap.if1.Module()
+        f = m.addfunction("main")
+        self.assertEqual(m.functions,[f])
+        self.assertEqual(str(f),'XGraph')
+        self.assertEqual(f.if1,'X 0 "main"')
+        return
+
+    def test_opnames_opcodes(self):
+        self.assertEqual(sap.if1.opcodes['Plus'],141)
+        self.assertEqual(sap.if1.opnames[141],'Plus')
+        return
+
 if __name__ == '__main__':
     unittest.main()
-
 
     if 0:
         m = sap.if1.Module()

@@ -22,7 +22,7 @@ class type : public IF1<type> {
   static PySequenceMethods as_sequence;
   static void setup();
 
-  static PyObject* string(PyObject*,std::shared_ptr<type>&);
+  virtual PyObject* string(PyObject*) override;
   static PyObject* string(std::weak_ptr<type>&);
   operator long();
 

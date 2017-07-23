@@ -172,8 +172,17 @@ PyObject* module::addtypechain(PyObject* self,PyObject* args,PyObject* kwargs) {
 }
 
 PyObject* module::addfunction(PyObject* self,PyObject* args) {
-  //auto cxx = reinterpret_cast<python*>(self)->cxx;
-  return PyErr_Format(PyExc_NotImplementedError,"add function");
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+
+  char const* name = nullptr;
+  long opcode = IFXGraph;
+  if (!PyArg_ParseTuple(args,"s|l",&name,&opcode)) return nullptr;
+  auto p = std::make_shared<graph>(opcode,cxx,name);
+
+  PyOwned f(p->package());
+
+  if (PyList_Append(cxx->functions.borrow(),f.borrow()) < 0) return nullptr;
+  return f.incref();
 }
 
 PyGetSetDef module::getset[] = {
