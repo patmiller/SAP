@@ -1,0 +1,46 @@
+#ifndef PARSER_H
+#define PARSER_H
+
+enum literal_parser_state_t {
+  ERROR = 0,
+  START,
+  INTEGER,
+  REAL,
+  REAL_EXP_OPTSIGN,
+  REAL_EXP_DIGIT,
+  REAL_EXP,
+  DOUBLEREAL_EXP_OPTSIGN,
+  DOUBLEREAL_EXP_DIGIT,
+  DOUBLEREAL_EXP,
+  NIL0,
+  NIL1,
+  NIL2,
+  TRUE0,
+  TRUE1,
+  TRUE2,
+  TRUE3,
+  FALSE0,
+  FALSE1,
+  FALSE2,
+  FALSE3,
+  FALSE4,
+  CHAR_BODY,
+  CHAR_ESCAPE,
+  CHAR_END,
+  CHAR_NULL,
+  STRING_BODY,
+  STRING_ESCAPE,
+  STRING_END,
+  NSTATES,		// Just marks the last state
+  BOOLEAN_LITERAL = -1,
+  CHAR_LITERAL = -2,
+  DOUBLEREAL_LITERAL = -3,
+  INTEGER_LITERAL = -4,
+  NULL_LITERAL = -5,
+  REAL_LITERAL = -6,
+  STRING_LITERAL = -7
+};
+
+
+literal_parser_state_t parse_literal(const char* p);
+#endif

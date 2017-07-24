@@ -80,8 +80,7 @@ PyObject* type::get_parameter1(PyObject* self,void*) {
 
   std::shared_ptr<type> p1 = cxx->parameter1.lock();
   if (p1) return p1->lookup();
-  Py_INCREF(Py_None);
-  return Py_None;
+  Py_RETURN_NONE;
 }
 
 PyObject* type::get_parameter2(PyObject* self,void*) {
@@ -89,8 +88,7 @@ PyObject* type::get_parameter2(PyObject* self,void*) {
 
   std::shared_ptr<type> p2 = cxx->parameter2.lock();
   if (p2) return p2->lookup();
-  Py_INCREF(Py_None);
-  return Py_None;
+  Py_RETURN_NONE;
 }
 
 PyObject* type::get_pragmas(PyObject* pySelf,void*) {

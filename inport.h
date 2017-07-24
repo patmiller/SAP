@@ -25,6 +25,8 @@ class inport : public IF1<inport> {
   static PySequenceMethods as_sequence;
 
   static void setup();
+  static PyObject* getattro(PyObject* self,PyObject* attr);
+  static int setattro(PyObject* self,PyObject* attr,PyObject* rhs);
 
   virtual PyObject* string(PyObject*) override;
 
@@ -39,6 +41,8 @@ class inport : public IF1<inport> {
   static PyObject* get_pragmas(PyObject*,void*);
   static PyObject* get_src(PyObject*,void*);
   static PyObject* get_oport(PyObject*,void*);
+
+  std::shared_ptr<nodebase> my_node();
 
   inport(python* self, PyObject* args,PyObject* kwargs);
   inport(std::shared_ptr<nodebase>);

@@ -35,6 +35,15 @@ class graph : public nodebase, public IF1<graph> {
   static PyObject* get_nodes(PyObject*,void*);
   static PyObject* get_if1(PyObject*,void*);
 
+  virtual std::shared_ptr<graph> my_graph() override {
+    return shared();
+  }
+
+  virtual std::shared_ptr<module> my_module() {
+    auto m = weakmodule.lock();
+    if (m) return m;
+    throw PyErr_Format(PyExc_NotImplementedError,"inner graph");
+  }
 
   graph(python* self, PyObject* args,PyObject* kwargs);
   graph(long opcode,

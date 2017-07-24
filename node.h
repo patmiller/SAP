@@ -3,48 +3,8 @@
 #define SAP_NODE
 
 #include "IFX.h"
+#include "nodebase.h"
 
-class module;
-class inport;
-
-class nodebase {
-public:
-  long opcode;
-  std::weak_ptr<nodebase> weakparent;
-  PyOwned children;
-  PyOwned pragmas;
-  std::map<long,std::shared_ptr<inport>> inputs;
-  std::map<long,std::shared_ptr<int>> outputs;
-  
-  nodebase(long opcode=-1,
-	   std::shared_ptr<nodebase> parent=nullptr)
-    : opcode(opcode),
-      weakparent(parent)
-  {
-    children = PyList_New(0);
-    if (!children) throw PyErr_Occurred();
-
-    pragmas = PyDict_New();
-    if (!pragmas) throw PyErr_Occurred();
-  }
-  virtual ~nodebase() {}
-
-  PyObject* string() {
-    auto p = opcode_to_name.find(opcode);
-    if (p == opcode_to_name.end()) {
-      return PyString_FromFormat("<Node %ld>",opcode);
-    }
-    return PyString_FromString(p->second.c_str());
-  }
-
-  virtual PyObject* lookup() {
-    return PyErr_Format(PyExc_NotImplementedError,"node lookup");
-  }
-
-  static std::map<long,std::string> opcode_to_name;
-  static std::map<std::string,long> name_to_opcode;
-
-};
 
 class node : public nodebase, public IF1<node> {
  public:

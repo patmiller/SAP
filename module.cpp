@@ -133,10 +133,7 @@ PyObject* module::addtypechain(PyObject* self,PyObject* args,PyObject* kwargs) {
 
   ssize_t n = PyTuple_GET_SIZE(args);
   // If we have no entries, just return None
-  if (n == 0) {
-    Py_INCREF(Py_None);
-    return Py_None;
-  }
+  if (n == 0) Py_RETURN_NONE;
 
   // Make sure we have a type code and the optional names
   PyObject* code = (kwargs)?PyDict_GetItem(kwargs,CODE):nullptr;

@@ -10,6 +10,8 @@ setup(name='SAP',
       ext_modules=[
           Extension('sap.if1',
                     [
+                        'nodebase.cpp',
+                        'parser.cpp',
                         'inport.cpp',
                         'graph.cpp',
                         'node.cpp',
@@ -19,7 +21,7 @@ setup(name='SAP',
                         'outport.cpp',
                     ],
                     extra_compile_args=['-std=c++11'],
-                    depends=['IFX.h','module.h','type.h','node.h','graph.h','inport.h','outport.h'],
+                    depends=['IFX.h','module.h','type.h','node.h','graph.h','inport.h','outport.h','parser.h','nodebase.h'],
           ),
       ],
       )

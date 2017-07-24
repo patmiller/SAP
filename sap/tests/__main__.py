@@ -126,7 +126,7 @@ E 0 2 1 2 4
         return
 
         
-    def xtest_fail(self):
+    def test_fail(self):
         m = sap.if1.Module()
         g = m.addfunction("main")
 
@@ -741,7 +741,6 @@ T 10 7 1 9
         self.assertEqual(p.pragmas,{})
 
         p << 3
-
         self.assertEqual(p.literal,"3")
         self.assertIs(p.type,m.integer)
         self.assertIs(p.dst,f)
@@ -758,16 +757,35 @@ T 10 7 1 9
         self.assertEqual(f(3).pragmas,{})
 
         p << "3.5"
-
-        self.assertEqual(p.literal,"3")
-        self.assertIs(p.type,m.integer)
+        self.assertEqual(p.literal,"3.5")
+        self.assertIs(p.type,m.real)
         self.assertIs(p.dst,f)
         self.assertIs(p.src,None)
         self.assertIs(p.oport,None)
         self.assertEqual(p.pragmas,{})
 
+        p << True
+        self.assertEqual(p.literal,"true")
+        self.assertIs(p.type,m.boolean)
+
+        p << False
+        self.assertEqual(p.literal,"false")
+        self.assertIs(p.type,m.boolean)
+
+        p << 3.5
+        self.assertEqual(p.literal,"3.5d")
+        self.assertIs(p.type,m.doublereal)
+
+        p << 3.5e20
+        self.assertEqual(p.literal,"3.5d20")
+        self.assertIs(p.type,m.doublereal)
+
+        p << 3.5e-20
+        self.assertEqual(p.literal,"3.5d-20")
+        self.assertIs(p.type,m.doublereal)
+
         f(3).zz = 'hi'
-        self.assertEqual(p.pragmas,{'z':'hi'})
+        self.assertEqual(p.pragmas,{'zz':'hi'})
 
         return
 
