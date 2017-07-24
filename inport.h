@@ -5,16 +5,18 @@
 #include "IFX.h"
 
 class type;
-class node;
+class nodebase;
 class inport : public IF1<inport> {
-  long      iport;
+ public:
+  std::weak_ptr<nodebase> weaknode;
 
-  std::string value;
+  std::string literal;
   std::weak_ptr<type> weakliteral_type;
   std::weak_ptr<type> weaksrc;
   long      oport;
   PyOwned(pragmas);
- public:
+
+  static long flags;
   static PyTypeObject Type;
   static char const* doc;
   static PyMethodDef methods[];
@@ -22,7 +24,15 @@ class inport : public IF1<inport> {
   static PyNumberMethods as_number;
   static PySequenceMethods as_sequence;
 
-  static PyObject* get_node(PyObject*,void*);
+  static void setup();
+
+  virtual PyObject* string(PyObject*) override;
+
+  long port();
+
+  static PyObject* lshift(PyObject*,PyObject*);
+
+  static PyObject* get_dst(PyObject*,void*);
   static PyObject* get_port(PyObject*,void*);
   static PyObject* get_literal(PyObject*,void*);
   static PyObject* get_type(PyObject*,void*);
@@ -30,7 +40,8 @@ class inport : public IF1<inport> {
   static PyObject* get_src(PyObject*,void*);
   static PyObject* get_oport(PyObject*,void*);
 
-  inport (python* self, PyObject* args,PyObject* kwargs);  
+  inport(python* self, PyObject* args,PyObject* kwargs);
+  inport(std::shared_ptr<nodebase>);
 };
 
 #endif

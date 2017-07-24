@@ -5,14 +5,15 @@
 #include "IFX.h"
 
 class module;
+class inport;
 
 class nodebase {
- protected:
+public:
   long opcode;
   std::weak_ptr<nodebase> weakparent;
   PyOwned children;
   PyOwned pragmas;
-  std::map<long,std::shared_ptr<int>> inputs;
+  std::map<long,std::shared_ptr<inport>> inputs;
   std::map<long,std::shared_ptr<int>> outputs;
   
   nodebase(long opcode=-1,
@@ -35,7 +36,11 @@ class nodebase {
     }
     return PyString_FromString(p->second.c_str());
   }
-public:
+
+  virtual PyObject* lookup() {
+    return PyErr_Format(PyExc_NotImplementedError,"node lookup");
+  }
+
   static std::map<long,std::string> opcode_to_name;
   static std::map<std::string,long> name_to_opcode;
 

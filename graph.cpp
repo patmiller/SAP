@@ -1,6 +1,35 @@
 #include "graph.h"
+#include "inport.h"
+#include "module.h"
 
 PyTypeObject graph::Type;
+
+void graph::setup() {
+  Type.tp_call = graph::call;
+}
+
+PyObject* graph::call(PyObject* self,PyObject* args,PyObject* kwargs) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+
+  long port;
+  char* keywords[] = {(char*)"port",nullptr};
+  if (!PyArg_ParseTupleAndKeywords(args,kwargs,"l",keywords,&port)) return nullptr;
+  if (port <= 0) {
+    return PyErr_Format(PyExc_TypeError,"invalid port %ld",port);
+  }
+
+  // We either have a port here or we must make one
+  auto p = cxx->inputs.find(port);
+  std::shared_ptr<inport> E;
+  if (p != cxx->inputs.end()) {
+    E = p->second;
+  }
+  else {
+    E = cxx->inputs[port] = std::make_shared<inport>(cxx);
+  }
+
+  return E->package();
+}
 
 PyTypeObject* graph::basetype() {
   return &node::Type;
@@ -62,6 +91,23 @@ PyObject* graph::get_if1(PyObject* self,void*) {
 
 PyObject* graph::string(PyObject*) {
   return nodebase::string();
+}
+
+PyObject* graph::lookup() {
+  // If we have a module, we're a top level function
+  auto module = weakmodule.lock();
+  if (module) {
+    PyObject* functions = module->functions.borrow();
+    for(ssize_t i=0;i<PyList_GET_SIZE(functions);++i) {
+      auto P = PyList_GET_ITEM(functions,i);
+      auto F = reinterpret_cast<graph::python*>(P);
+      if (F->cxx.get() == this) {
+	Py_INCREF(P);
+	return P;
+      }
+    }
+  }
+  return PyErr_Format(PyExc_NotImplementedError,"graph lookup");
 }
 
 graph::graph(python* self, PyObject* args,PyObject* kwargs)

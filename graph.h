@@ -16,8 +16,16 @@ class graph : public nodebase, public IF1<graph> {
   static PyGetSetDef getset[];
   static PyNumberMethods as_number;
   static PySequenceMethods as_sequence;
+  static void setup();
+
+  static long flags;
+  static PyTypeObject* basetype();
+
+  static PyObject* call(PyObject*,PyObject*,PyObject*);
 
   virtual PyObject* string(PyObject*) override;
+
+  virtual PyObject* lookup() override;
 
   PyObject* addnode(PyObject*,PyObject*);
 
@@ -27,8 +35,6 @@ class graph : public nodebase, public IF1<graph> {
   static PyObject* get_nodes(PyObject*,void*);
   static PyObject* get_if1(PyObject*,void*);
 
-  static long flags;
-  static PyTypeObject* basetype();
 
   graph(python* self, PyObject* args,PyObject* kwargs);
   graph(long opcode,

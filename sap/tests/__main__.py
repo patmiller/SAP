@@ -713,6 +713,11 @@ T 10 7 1 9
 
         return
 
+    def test_opnames_opcodes(self):
+        self.assertEqual(sap.if1.opcodes['Plus'],141)
+        self.assertEqual(sap.if1.opnames[141],'Plus')
+        return
+
     def test_barefunction(self):
         m = sap.if1.Module()
         f = m.addfunction("main")
@@ -721,9 +726,49 @@ T 10 7 1 9
         self.assertEqual(f.if1,'X 0 "main"')
         return
 
-    def test_opnames_opcodes(self):
-        self.assertEqual(sap.if1.opcodes['Plus'],141)
-        self.assertEqual(sap.if1.opnames[141],'Plus')
+    def test_simplein(self):
+        m = sap.if1.Module()
+        f = m.addfunction("main")
+        p = f(3)
+        self.assertEqual(str(p),'3:XGraph')
+        self.assertEqual(p.port,3)
+        self.assertEqual(int(p),3)
+        self.assertIs(p.literal,None)
+        self.assertIs(p.type,None)
+        self.assertIs(p.dst,f)
+        self.assertIs(p.src,None)
+        self.assertIs(p.oport,None)
+        self.assertEqual(p.pragmas,{})
+
+        p << 3
+
+        self.assertEqual(p.literal,"3")
+        self.assertIs(p.type,m.integer)
+        self.assertIs(p.dst,f)
+        self.assertIs(p.src,None)
+        self.assertIs(p.oport,None)
+        self.assertEqual(p.pragmas,{})
+
+        # Same, even on a new selection
+        self.assertEqual(f(3).literal,"3")
+        self.assertIs(f(3).type,m.integer)
+        self.assertIs(f(3).dst,f)
+        self.assertIs(f(3).src,None)
+        self.assertIs(f(3).oport,None)
+        self.assertEqual(f(3).pragmas,{})
+
+        p << "3.5"
+
+        self.assertEqual(p.literal,"3")
+        self.assertIs(p.type,m.integer)
+        self.assertIs(p.dst,f)
+        self.assertIs(p.src,None)
+        self.assertIs(p.oport,None)
+        self.assertEqual(p.pragmas,{})
+
+        f(3).zz = 'hi'
+        self.assertEqual(p.pragmas,{'z':'hi'})
+
         return
 
 if __name__ == '__main__':
