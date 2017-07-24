@@ -6,11 +6,11 @@
 
 class type;
 class outport : public IF1<outport> {
+ public:
   std::weak_ptr<type> weaktype;
   unsigned long port;
   PyOwned pragmas;
 
- public:
   static PyTypeObject Type;
   static char const* doc;
   static PyMethodDef methods[];

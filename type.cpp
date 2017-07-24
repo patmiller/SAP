@@ -91,8 +91,9 @@ PyObject* type::get_parameter2(PyObject* self,void*) {
   Py_RETURN_NONE;
 }
 
-PyObject* type::get_pragmas(PyObject* pySelf,void*) {
-  return PyErr_Format(PyExc_NotImplementedError,"get_pragmas");
+PyObject* type::get_pragmas(PyObject* self,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  return cxx->pragmas.incref();
 }
 
 PyObject* type::get_name(PyObject* self,void*) {

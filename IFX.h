@@ -98,9 +98,26 @@ public:
   }
 
   static PyObject* getattro(PyObject* self,PyObject* attr) {
+    if (PyString_Check(attr) && PyString_GET_SIZE(attr) == 2) {
+      auto cxx = reinterpret_cast<python*>(self)->cxx;
+      auto A = PyDict_GetItem(cxx->pragmas.borrow(),attr);
+      if (A) { Py_INCREF(A); return A; }
+    }
     return PyObject_GenericGetAttr(self,attr);
   }
   static int setattro(PyObject* self,PyObject* attr,PyObject* rhs) {
+    if (PyString_Check(attr) && PyString_GET_SIZE(attr) == 2) { 
+      // Use the local pragma dictionary to hold these
+      auto cxx = reinterpret_cast<python*>(self)->cxx;
+      auto __dict__ = cxx->pragmas.borrow();
+      if (rhs) {
+	PyDict_SetItem(__dict__,attr,rhs);
+	return 0;
+      } else if (PyDict_GetItem(__dict__,attr)) {
+	PyDict_DelItem(__dict__,attr);
+	return 0;
+      }
+    }
     return PyObject_GenericSetAttr(self,attr,rhs);
   }
 
@@ -127,16 +144,13 @@ public:
       // Only set up if we have getset defined
       T::Type.tp_getset = T::getset;
     }
+    T::Type.tp_as_number = &T::as_number;
+    T::Type.tp_as_sequence = &T::as_sequence;
+
     T::Type.tp_getattro = T::getattro;
     T::Type.tp_setattro = T::setattro;
 
-    T::setup();
-    T::Type.tp_as_number = &T::as_number;
-    T::Type.tp_as_sequence = &T::as_sequence;
-    //T::Type.tp_richcompare
-    //T::Type.tp_
-    //T::Type.tp_
-    //T::Type.tp_
+    T::setup(); // Other goodies that the type wants
 
     if (PyType_Ready(&T::Type) < 0) return false;
     Py_INCREF(&T::Type);

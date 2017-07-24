@@ -169,7 +169,7 @@ E 0 2 1 2 4
                     self.assertIs(T,expected)
         return
 
-    def xtest_typenames(self):
+    def test_typenames(self):
         m = sap.if1.Module()
 
         # Get a type name
@@ -195,7 +195,7 @@ T 9 0 2 %na=string
 ''')
         return
 
-    def xtest_typepragmas(self):
+    def test_typepragmas(self):
         m = sap.if1.Module()
         
         # The na and name attributes are linked

@@ -25,8 +25,6 @@ class inport : public IF1<inport> {
   static PySequenceMethods as_sequence;
 
   static void setup();
-  static PyObject* getattro(PyObject* self,PyObject* attr);
-  static int setattro(PyObject* self,PyObject* attr,PyObject* rhs);
 
   virtual PyObject* string(PyObject*) override;
 

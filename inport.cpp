@@ -196,16 +196,6 @@ std::shared_ptr<nodebase> inport::my_node() {
   return sp;
 }
 
-PyObject* inport::getattro(PyObject* self,PyObject* attr) {
-  return PyObject_GenericGetAttr(self,attr);
-}
-
-int inport::setattro(PyObject* self,PyObject* attr,PyObject* rhs) {
-  auto cxx = reinterpret_cast<python*>(self)->cxx;
-  if (PyDict_SetItem(cxx->pragmas.borrow(),attr,rhs) == 0) return 0;
-  return PyObject_GenericSetAttr(self,attr,rhs);
-}
-
 inport::inport(python* self, PyObject* args,PyObject* kwargs)
 {
   throw PyErr_Format(PyExc_TypeError,"Cannot create InPorts");
