@@ -18,19 +18,19 @@ PyGetSetDef outport::getset[] = {
 };
 
 PyObject* outport::get_node(PyObject*,void*) {
-  return PyErr_Format(PyExc_NotImplementedError,"node");
+  return TODO("node");
 }
 PyObject* outport::get_port(PyObject*,void*) {
-  return PyErr_Format(PyExc_NotImplementedError,"port");
+  return TODO("port");
 }
 PyObject* outport::get_type(PyObject*,void*) {
-  return PyErr_Format(PyExc_NotImplementedError,"type");
+  return TODO("type");
 }
 PyObject* outport::get_edges(PyObject*,void*) {
-  return PyErr_Format(PyExc_NotImplementedError,"edges");
+  return TODO("edges");
 }
 PyObject* outport::get_pragmas(PyObject*,void*) {
-  return PyErr_Format(PyExc_NotImplementedError,"pragmas");
+  return TODO("pragmas");
 }
 
 outport::outport(python* self, PyObject* args,PyObject* kwargs)

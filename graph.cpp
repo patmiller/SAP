@@ -1,6 +1,7 @@
 #include "graph.h"
 #include "inport.h"
 #include "module.h"
+#include "type.h"
 
 PyTypeObject graph::Type;
 
@@ -51,17 +52,77 @@ PyGetSetDef graph::getset[] = {
 };
 
 PyObject* graph::get_name(PyObject* self,void*) {
-  return PyErr_Format(PyExc_NotImplementedError,"get_name");
+  return TODO("get name");
 }
 int graph::set_name(PyObject* self,PyObject*,void*) {
-  PyErr_Format(PyExc_NotImplementedError,"set_name");
+  TODO("set name");
   return -1;
 }
-PyObject* graph::get_type(PyObject* self,void*) {
-  return PyErr_Format(PyExc_NotImplementedError,"get_type");
+
+PyObject* graph::my_type() {
+  STATIC_STR(ADDTYPECHAIN,"addtypechain");
+  STATIC_STR(ADDTYPE,"addtype");
+  static PyObject* pyIF_Function = nullptr;
+  if (!pyIF_Function) {
+    pyIF_Function = PyInt_FromLong(IF_Function);
+    if (!pyIF_Function) return nullptr;
+  }
+
+  auto m = weakmodule.lock();
+  if (!m) Py_RETURN_NONE;
+
+  // Collect output types from the input edges (reversal!)
+  // If no edges are wired in, we have no output type
+  ssize_t outarity = inputs.size();
+  if (outarity == 0) Py_RETURN_NONE;
+  
+  PyOwned outs(PyTuple_New(outarity));
+  if (!outs) return nullptr;
+  for(ssize_t port=1; port <= outarity; ++port) {
+    auto p = inputs.find(port);
+    if (p == inputs.end()) {
+      return PyErr_Format(PyExc_ValueError,"function graph is missing an edge flowing to port %zd",port);
+    }
+    auto T = p->second->my_type();
+    auto P = T->lookup();
+    Py_INCREF(P);
+    PyTuple_SET_ITEM(outs.borrow(),port-1,P);
+  }
+
+  PyOwned pm(m->package());
+  if (!pm) return nullptr;
+  PyOwned atc(PyObject_GetAttr(pm.borrow(),ADDTYPECHAIN));
+  if (!atc) return nullptr;
+  PyOwned otup(PyObject_Call(atc.borrow(),outs.borrow(),nullptr));
+  if (!otup) return nullptr;
+
+  ssize_t inarity = outputs.size();
+  PyOwned ins(PyTuple_New(inarity));
+  if (!ins) return nullptr;
+  for(ssize_t port=1; port <= inarity; ++port) {
+    return TODO("function inputs");
+  }
+  PyOwned itup(PyObject_Call(atc.borrow(),ins.borrow(),nullptr));
+  if (!itup) return nullptr;
+  
+  PyOwned FT(
+	     PyObject_CallMethodObjArgs(pm.borrow(),
+					ADDTYPE,
+					pyIF_Function,
+					itup.borrow(),
+					otup.borrow(),
+					nullptr));
+  if (!FT) return nullptr;
+  return FT.incref();
 }
+
+PyObject* graph::get_type(PyObject* self,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  return cxx->my_type();
+}
+
 PyObject* graph::get_nodes(PyObject* self,void*) {
-  return PyErr_Format(PyExc_NotImplementedError,"get_nodes");
+  return TODO("get nodes");
 }
 PyObject* graph::get_if1(PyObject* self,void*) {
   auto cxx = reinterpret_cast<python*>(self)->cxx;
@@ -69,28 +130,45 @@ PyObject* graph::get_if1(PyObject* self,void*) {
   // TODO: Have to deal with I graphs
   char tag = (cxx->opcode == IFXGraph)?'X':'G';
 
-  // TODO: make an automatic type for top levels
+  // Compute the type for this graph
+  PyOwned graphtype(cxx->my_type());
+  if (!graphtype) return nullptr;
   long typeno = 0;
+  if (graphtype.borrow() != Py_None) {
+    typeno = reinterpret_cast<type::python*>(graphtype.borrow())->cxx->operator long();
+  }
 
-  PyOwned prefix;
+  PyOwned result;
   if (cxx->name.size()) {
-    prefix = PyString_FromFormat("%c %ld \"%s\"",
+    result = PyString_FromFormat("%c %ld \"%s\"",
 				 tag,typeno,cxx->name.c_str());
   } else {
-    prefix = PyString_FromFormat("%c %ld",tag,typeno);
+    result = PyString_FromFormat("%c %ld",tag,typeno);
   }
-  if (!prefix) return nullptr;
+  if (!result) return nullptr;
 
-  PyObject* prags = pragma_string(cxx->pragmas.borrow());
+  // Pragmas on the node
+  PyOwned prags(pragma_string(cxx->pragmas.borrow()));
   if (!prags) return nullptr;
+
+  // We also need the input edges (we are label 0)
+  PyOwned edges(cxx->edge_if1(0L));
+  if (!edges) return nullptr;
   
-  PyObject* result = prefix.incref();
-  PyString_Concat(&result,prags);
-  return result;
+  PyString_Concat(result.addr(),prags.borrow());
+  if (!result) return nullptr;
+  PyString_Concat(result.addr(),edges.borrow());
+  if (!result) return nullptr;
+
+  return result.incref();
 }
 
 PyObject* graph::string(PyObject*) {
   return nodebase::string();
+}
+
+graph::operator long() {
+  throw TODO("long");
 }
 
 PyObject* graph::lookup() {
@@ -107,7 +185,7 @@ PyObject* graph::lookup() {
       }
     }
   }
-  return PyErr_Format(PyExc_NotImplementedError,"graph lookup");
+  return TODO("graph lookup");
 }
 
 graph::graph(python* self, PyObject* args,PyObject* kwargs)

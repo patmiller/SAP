@@ -226,26 +226,25 @@ PyObject* type::string(PyObject*) {
   case IF_Tag:
   case IF_Tuple: {
     PyObject* name = PyDict_GetItem(pragmas.borrow(),NA);
-    PyOwned answer(PyString_FromString(""));
-    PyObject* result = answer.incref();
+    PyOwned result(PyString_FromString(""));
     if (name) {
-      PyString_Concat(&result,name);
+      PyString_Concat(result.addr(),name);
       if (!result) return nullptr;
-      PyString_Concat(&result,COLON);
+      PyString_Concat(result.addr(),COLON);
       if (!result) return nullptr;
     }
     PyOwned element(string(parameter1));
-    if (!element) {Py_DECREF(result); return nullptr;}
-    PyString_Concat(&result,element.borrow());
+    if (!element) return nullptr;
+    PyString_Concat(result.addr(),element.borrow());
     if (!result) return nullptr;
     if (parameter2.lock()) {
-      PyString_Concat(&result,ARROW);
+      PyString_Concat(result.addr(),ARROW);
       if (!result) return nullptr;
       PyObject* tail = string(parameter2);
-      if (!tail) {Py_DECREF(result); return nullptr;}
-      PyString_ConcatAndDel(&result,tail);
+      if (!tail) return nullptr;
+      PyString_ConcatAndDel(result.addr(),tail);
     }
-    return result;
+    return result.incref();
   }
 
   case IF_Function:
@@ -255,7 +254,6 @@ PyObject* type::string(PyObject*) {
     if (!outputs) return nullptr;
     return PyString_FromFormat("%s[%s returns %s]",flavor[code],PyString_AS_STRING(inputs.borrow()),PyString_AS_STRING(outputs.borrow()));
   }
-
 
   return PyErr_Format(PyExc_NotImplementedError,"unknown type code %ld",code);
 }

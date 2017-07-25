@@ -11,6 +11,8 @@
 #define STATIC_STR(name,value)  \
   static PyObject* name = nullptr;			\
   if (!name) name = PyString_FromString(value);
+
+#define TODO(msg) PyErr_Format(PyExc_NotImplementedError,"\n%s:%d: %s",__FILE__,__LINE__,msg)
  
 class PyOwned {
   PyObject* P = nullptr;
@@ -31,7 +33,8 @@ class PyOwned {
   operator bool() const { return P != nullptr; }
   PyObject* borrow() { return P; }
   PyObject* incref() { Py_XINCREF(P); return P; }
-
+  PyObject** addr() { return &P; }
+  PyObject*const* addr() const { return &P; }
 };
 
 
@@ -215,7 +218,7 @@ public:
     }
     if (PyList_Sort(sorted) != 0) { Py_DECREF(sorted); return nullptr; }
 
-    PyObject* result = PyString_FromString("");
+    PyOwned result(PyString_FromString(""));
     for(ssize_t i=0; i < PyList_GET_SIZE(sorted); ++i) {
       PyObject* key /*borrowed*/ = PyList_GET_ITEM(sorted,i);
       PyObject* pragma /*borrowed*/ = PyDict_GetItem(dict,key);
@@ -224,18 +227,18 @@ public:
       }
       if (!pragma) continue;
 
-      PyString_Concat(&result,SPACEPERCENT);
+      PyString_Concat(result.addr(),SPACEPERCENT);
       if (!result) return nullptr;
-      PyString_Concat(&result,key);
+      PyString_Concat(result.addr(),key);
       if (!result) return nullptr;
-      PyString_Concat(&result,EQUAL);
+      PyString_Concat(result.addr(),EQUAL);
       if (!result) return nullptr;
       PyObject* rhs /*borrowed*/ = PyObject_Str(pragma);
-      if (!rhs) { Py_DECREF(result); return nullptr; }
-      PyString_ConcatAndDel(&result,rhs);
+      if (!rhs) return nullptr;
+      PyString_ConcatAndDel(result.addr(),rhs);
       if (!result) return nullptr;
     }
-    return result;
+    return result.incref();
   }
 };
 

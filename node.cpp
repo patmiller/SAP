@@ -22,26 +22,26 @@ PyGetSetDef node::getset[] = {
 };
 
 PyObject* node::get_opcode(PyObject* pySelf,void*) {
-  return PyErr_Format(PyExc_NotImplementedError,"get_opcode");
+  return TODO("get_opcode");
 }
 int node::set_opcode(PyObject* pySelf,PyObject*,void*) {
-  PyErr_Format(PyExc_NotImplementedError,"set_if1");
+  TODO("set_if1");
   return -1;
 }
 PyObject* node::get_children(PyObject* pySelf,void*) {
-  return PyErr_Format(PyExc_NotImplementedError,"get_children");
+  return TODO("get_children");
 }
 PyObject* node::get_pragmas(PyObject* pySelf,void*) {
-  return PyErr_Format(PyExc_NotImplementedError,"get_pragmas");
+  return TODO("get_pragmas");
 }
 PyObject* node::get_if1(PyObject* pySelf,void*) {
-  return PyErr_Format(PyExc_NotImplementedError,"get_if1");
+  return TODO("get_if1");
 }
 PyObject* node::get_inputs(PyObject* pySelf,void*) {
-  return PyErr_Format(PyExc_NotImplementedError,"get_inputs");
+  return TODO("get_inputs");
 }
 PyObject* node::get_outputs(PyObject* pySelf,void*) {
-  return PyErr_Format(PyExc_NotImplementedError,"get_outputs");
+  return TODO("get_outputs");
 }
 
 PyObject* node::string(PyObject*) {

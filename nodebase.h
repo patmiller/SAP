@@ -21,8 +21,10 @@ public:
 
   PyObject* string();
 
+  virtual operator long();
   virtual PyObject* lookup();
   virtual std::shared_ptr<graph> my_graph();
+  PyObject* edge_if1(long);
 
   static std::map<long,std::string> opcode_to_name;
   static std::map<std::string,long> name_to_opcode;

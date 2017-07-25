@@ -7,7 +7,7 @@
 class type;
 class nodebase;
 class inport : public IF1<inport> {
- public:
+public:
   std::weak_ptr<nodebase> weaknode;
 
   std::string literal;
@@ -27,8 +27,9 @@ class inport : public IF1<inport> {
   static void setup();
 
   virtual PyObject* string(PyObject*) override;
-
+  
   long port();
+  std::shared_ptr<type> my_type();
 
   static PyObject* lshift(PyObject*,PyObject*);
 

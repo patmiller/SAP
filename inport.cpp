@@ -54,16 +54,26 @@ PyObject* inport::get_literal(PyObject* self,void*) {
 				    cxx->literal.size());
 }
 
+std::shared_ptr<type> inport::my_type() {
+  if (literal.size() == 0) {
+    throw TODO("type for full edges");
+  }
+  auto tp = weakliteral_type.lock();
+  return tp;
+}
+
 // ----------------------------------------------------------------------
 // The type was set with the literal value otherwise
 // we query the port
 // ----------------------------------------------------------------------
 PyObject* inport::get_type(PyObject* self,void*) {
   auto cxx = reinterpret_cast<python*>(self)->cxx;
-  if (cxx->literal.size() == 0) Py_RETURN_NONE;
-  auto type = cxx->weakliteral_type.lock();
-  if (!type) Py_RETURN_NONE;
-  return type->lookup();
+  try {
+    auto tp = cxx->my_type();
+    if (tp) return tp->lookup();
+  } catch (PyObject*) {
+  }
+  Py_RETURN_NONE;
 }
 
 PyObject* inport::get_src(PyObject* self,void*) {

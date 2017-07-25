@@ -27,6 +27,8 @@ class graph : public nodebase, public IF1<graph> {
 
   virtual PyObject* lookup() override;
 
+  virtual operator long() override;
+
   PyObject* addnode(PyObject*,PyObject*);
 
   static PyObject* get_name(PyObject*,void*);
@@ -35,6 +37,8 @@ class graph : public nodebase, public IF1<graph> {
   static PyObject* get_nodes(PyObject*,void*);
   static PyObject* get_if1(PyObject*,void*);
 
+  PyObject* my_type();
+
   virtual std::shared_ptr<graph> my_graph() override {
     return shared();
   }
@@ -42,7 +46,8 @@ class graph : public nodebase, public IF1<graph> {
   virtual std::shared_ptr<module> my_module() {
     auto m = weakmodule.lock();
     if (m) return m;
-    throw PyErr_Format(PyExc_NotImplementedError,"inner graph");
+    TODO("inner graph");
+    return nullptr;
   }
 
   graph(python* self, PyObject* args,PyObject* kwargs);

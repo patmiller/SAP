@@ -209,13 +209,13 @@ PyObject* module::get_if1(PyObject* self,void*) {
   PyOwned suffix(functions);  // functions now borrowed
 
     // Add if1 for all the types
-  PyObject* result = PyString_FromString("");
+  PyOwned result(PyString_FromString(""));
   if (!result) return nullptr;
   for(ssize_t i=0;i<PyList_GET_SIZE(cxx->types.borrow());++i) {
     PyObject* if1 /*owned*/ = PyObject_GetAttrString(PyList_GET_ITEM(cxx->types.borrow(),i),"if1");
-    PyString_ConcatAndDel(&result,if1);
+    PyString_ConcatAndDel(result.addr(),if1);
     if (!result) return nullptr;
-    PyString_Concat(&result,NEWLINE);
+    PyString_Concat(result.addr(),NEWLINE);
     if (!result) return nullptr;
   }
 
@@ -230,20 +230,20 @@ PyObject* module::get_if1(PyObject* self,void*) {
 	!PyString_Check(remark)) {
       continue;
     }
-    PyString_Concat(&result,C_DOLLAR_SPACESPACE);
+    PyString_Concat(result.addr(),C_DOLLAR_SPACESPACE);
     if (!result) return nullptr;
-    PyString_Concat(&result,key);
+    PyString_Concat(result.addr(),key);
     if (!result) return nullptr;
-    PyString_Concat(&result,SPACE);
+    PyString_Concat(result.addr(),SPACE);
     if (!result) return nullptr;
-    PyString_Concat(&result,remark);
+    PyString_Concat(result.addr(),remark);
     if (!result) return nullptr;
-    PyString_Concat(&result,NEWLINE);
+    PyString_Concat(result.addr(),NEWLINE);
     if (!result) return nullptr;
   }
-  PyString_Concat(&result,functions);
+  PyString_Concat(result.addr(),functions);
 
-  return result;
+  return result.incref();
 }
 
 PyObject* module::get_types(PyObject* pySelf,void*) {
