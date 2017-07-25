@@ -189,8 +189,7 @@ long inport::port() {
   return 0;
 }
 
-PyObject* inport::string(PyObject* self) {
-  auto cxx = reinterpret_cast<python*>(self)->cxx;
+PyObject* inport::string(PyObject*) {
   auto node = weaknode.lock();
   if (!node) return PyErr_Format(PyExc_RuntimeError,"disconnected");
 

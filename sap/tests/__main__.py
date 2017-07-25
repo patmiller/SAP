@@ -789,6 +789,17 @@ T 10 7 1 9
 
         return
 
+    def test_outports(self):
+        m = sap.if1.Module()
+        f = m.addfunction("main")
+        f[1] = m.integer
+        self.assertIs(f[1].type,m.integer)
+        self.assertIs(f[1].node,f)
+        self.assertEqual(f[1].port,1)
+        self.assertEqual(int(f[1]),1)
+        self.assertEqual(str(f[1]),'XGraph:1')
+        return
+
 if __name__ == '__main__':
     unittest.main()
 

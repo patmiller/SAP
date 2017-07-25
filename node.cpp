@@ -1,4 +1,6 @@
 #include "node.h"
+#include "type.h"
+#include "outport.h"
 
 std::map<long,std::string> nodebase::opcode_to_name;
 std::map<std::string,long> nodebase::name_to_opcode;
@@ -46,6 +48,44 @@ PyObject* node::get_outputs(PyObject* pySelf,void*) {
 
 PyObject* node::string(PyObject*) {
   return nodebase::string();
+}
+
+ssize_t node::length(PyObject*) {
+  TODO("length");
+  return -1;
+}
+PyObject* node::item(PyObject* self,ssize_t idx) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  auto it = cxx->outputs.find(idx);
+  if (it == cxx->outputs.end()) {
+    return PyErr_Format(PyExc_IndexError,"no edge at this port");
+  }
+
+  return it->second->package();
+}
+int node::ass_item(PyObject* self,ssize_t idx,PyObject* rhs) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  // Delete?
+  if (!rhs) {
+    auto it = cxx->outputs.find(idx);
+    if (it != cxx->outputs.end()) cxx->outputs.erase(it);
+    return 0;
+  }
+
+  if ( !PyObject_TypeCheck(rhs,&type::Type) ) {
+    PyErr_SetString(PyExc_TypeError,"only types can be assigned to ports");
+    return -1;
+  }
+  auto& op = cxx->outputs[idx];
+  if (!op) op = std::make_shared<outport>(cxx);
+  op->weaktype = reinterpret_cast<type::python*>(rhs)->cxx;
+  return 0;
+}
+
+void node::setup() {
+  as_sequence.sq_length = length;
+  as_sequence.sq_item = item;
+  as_sequence.sq_ass_item = ass_item;
 }
 
 node::node(python* self, PyObject* args,PyObject* kwargs)

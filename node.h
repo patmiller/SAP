@@ -25,6 +25,12 @@ class node : public nodebase, public IF1<node> {
   static PyObject* get_inputs(PyObject*,void*);
   static PyObject* get_outputs(PyObject*,void*);
 
+  static ssize_t length(PyObject*);
+  static PyObject* item(PyObject*,ssize_t);
+  static int ass_item(PyObject*,ssize_t,PyObject*);
+
+  static void setup();
+
   node(python* self, PyObject* args,PyObject* kwargs);  
   node(long opcode=-1,std::shared_ptr<nodebase> parent=nullptr);
 };

@@ -5,6 +5,7 @@
 
 class module;
 class inport;
+class outport;
 class graph;
 
 class nodebase {
@@ -14,7 +15,7 @@ public:
   PyOwned children;
   PyOwned pragmas;
   std::map<long,std::shared_ptr<inport>> inputs;
-  std::map<long,std::shared_ptr<int>> outputs;
+  std::map<long,std::shared_ptr<outport>> outputs;
   
   nodebase(long opcode=-1,std::shared_ptr<nodebase> parent=nullptr);
   virtual ~nodebase() {}
