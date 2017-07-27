@@ -4,7 +4,7 @@
 
 #include "IFX.h"
 
-
+class type;
 class module : public IF1<module> {
  public:
   PyOwned types;
@@ -30,6 +30,11 @@ class module : public IF1<module> {
   static PyObject* get_types(PyObject*,void*);
   static PyObject* get_functions(PyObject*,void*);
   static PyObject* get_pragmas(PyObject*,void*);
+
+  bool strip_blanks(PyObject*);
+  bool read_types(PyObject*,std::map<long,std::shared_ptr<type>>& typemap);
+  bool read_pragmas(PyObject*);
+  bool read_functions(PyObject*,std::map<long,std::shared_ptr<type>>& typemap);
 
   module(python* self, PyObject* args,PyObject* kwargs);
   

@@ -2,7 +2,7 @@
 >>> from sap.if1 import Module,IF_Basic,IF_Array,IF_Stream,IF_Multiple,IF_Tuple,IF_Function
 >>> m = Module()
 >>> m
-<module>
+<Module>
 >>> m.types
 [boolean, character, doublereal, integer, null, real, wildbasic, wild, string]
 >>> map(int,m.types)
@@ -28,15 +28,11 @@ multiple[boolean]
 >>> ins = m.addtype(IF_Tuple,m.integer,m.integer)
 >>> outs = m.addtype(IF_Tuple,m.real)
 >>> m.addtype(IF_Function,ins,outs)
-(integer,integer)->(real)
->>> m.addtype(IF_Function,(m.boolean,m.real),(m.real,m.real))
-(boolean,real)->(real,real)
+function[integer->integer returns real]
 >>> m.addtype(IF_Function,m.integer,m.real)
-(integer)->(real)
+function[integer returns real]
 >>> m.addtype(IF_Function,None,m.real)
-->(real)
->>> m.addtype(IF_Function,(),m.real)
-->(real)
+function[ returns real]
 >>> print m.if1
 T 1 1 0 %na=boolean
 T 2 1 1 %na=character
@@ -50,15 +46,11 @@ T 9 0 2 %na=string
 T 10 0 4
 T 11 6 6
 T 12 4 1
-T 13 8 4 0
-T 14 8 4 13
-T 15 8 6 0
-T 16 3 14 15
-T 17 8 1 15
-T 18 8 6 15
-T 19 3 17 18
-T 20 3 13 15
-T 21 3 0 15
+T 13 8 4 4
+T 14 8 6 0
+T 15 3 13 14
+T 16 3 4 6
+T 17 3 0 6
 C$  C IF1 Check
 C$  D Dataflow ordered
 C$  F Python Frontend
@@ -91,7 +83,7 @@ X 11 "main"
 L     0 1 4 "3"''')
         return
 
-    def xtest_simple(self):
+    def test_simple(self):
         m = sap.if1.Module()
 
         g = m.addfunction("main")
@@ -120,8 +112,7 @@ X 12 "main"
 E 1 1 0 1 4
 N 1 141
 E 0 1 1 1 4
-E 0 2 1 2 4
-''')
+E 0 2 1 2 4''')
         return
 
         
@@ -236,29 +227,52 @@ T 9 0 2 %na=string
         self.assertEqual(m.integer.if1,'T 4 1 3 %aa=1 %cc=3 %mm=10 %na=integer %xx=20')
         return
 
-    def xtest_readif1(self):
-        sample = '''T 1 1 0 %fo=bar %na=bool %sl=10
+    def test_readif1_empty(self):
+        m = sap.if1.Module('')
+        self.assertEqual(m.if1,'')
+        self.assertEqual(m.functions,[])
+        self.assertEqual(m.types,[])
+        return
+        
+    def test_readif1(self):
+        canonical = '''T 1 1 0 %fo=bar %na=bool %sl=10
 T 2 1 3 %na=int
 T 3 0 2
 T 4 10
+T 5 1 4
+T 6 8 2 0
+T 7 8 2 6
+T 8 3 7 6
+T 9 3 0 6
+'''
+
+        # In this sample, we have some blank lines
+        # and we skip type 5
+        sample = '''T 1 1 0 %fo=bar %na=bool %sl=10
+T 2 1 3 %na=int
+ T 3 0 2
+T 4 10
+
 T 6 1 4
-T 7 8 2 0
+         T           7 8 2 0
 T 8 8 2 7
 T 9 3 8 7
 T 10 3 0 7
 '''
+        bignum = sample.replace('T 10','T 1000')
         # Order should not be important.  We try a random shuffle of the lines to see if we get the same info
         import random
         scramble = sample.split('\n')
         random.shuffle(scramble)
         scramble = '\n'.join(scramble)
-        for example in (sample,scramble):
+        for example in (sample,scramble,bignum):
             m = sap.if1.Module(example)
+
             # Normal types will be missing
             with self.assertRaises(AttributeError):
                 m.integer
 
-            # The Make sure the types look right
+            # Make sure the types look right
             self.assertIs(m.bool,m.types[0])
             self.assertEqual(m.bool.code,sap.if1.IF_Basic)
             self.assertEqual(m.bool.aux,sap.if1.IF_Boolean)
@@ -273,27 +287,23 @@ T 10 3 0 7
             self.assertEqual(m.types[3].code,sap.if1.IF_Wild)
             self.assertIs(m.types[3].parameter1,None)
 
-            # A skipped type (type 5 is missing above) shows up as a pure wild
-            self.assertEqual(m.types[4].code,sap.if1.IF_Wild)
-            self.assertIs(m.types[4].parameter1,None)
+            self.assertEqual(m.types[4].code, sap.if1.IF_Basic)
 
-            self.assertEqual(m.types[5].code, sap.if1.IF_Basic)
+            self.assertEqual(m.types[5].code, sap.if1.IF_Tuple)
+            self.assertIs(m.types[5].parameter1, m.int)
+            self.assertIs(m.types[5].parameter2, None)
 
             self.assertEqual(m.types[6].code, sap.if1.IF_Tuple)
             self.assertIs(m.types[6].parameter1, m.int)
-            self.assertIs(m.types[6].parameter2, None)
+            self.assertIs(m.types[6].parameter2, m.types[5])
 
-            self.assertEqual(m.types[7].code, sap.if1.IF_Tuple)
-            self.assertIs(m.types[7].parameter1, m.int)
-            self.assertIs(m.types[7].parameter2, m.types[6])
+            self.assertEqual(m.types[7].code, sap.if1.IF_Function)
+            self.assertIs(m.types[7].parameter1, m.types[6])
+            self.assertIs(m.types[7].parameter2, m.types[5])
 
             self.assertEqual(m.types[8].code, sap.if1.IF_Function)
-            self.assertIs(m.types[8].parameter1, m.types[7])
-            self.assertIs(m.types[8].parameter2, m.types[6])
-
-            self.assertEqual(m.types[9].code, sap.if1.IF_Function)
-            self.assertIs(m.types[9].parameter1, None)
-            self.assertIs(m.types[9].parameter2, m.types[6])
+            self.assertIs(m.types[8].parameter1, None)
+            self.assertIs(m.types[8].parameter2, m.types[5])
 
             # and check some pragmas
             self.assertIsInstance(m.bool.na,str)
@@ -301,12 +311,12 @@ T 10 3 0 7
             self.assertIsInstance(m.bool.fo,str)
             self.assertIsInstance(m.bool.sl,int)
 
-            # If we remove the "extra" wild, the if1 should look like the sample
-            self.assertEqual(m.if1.replace('T 5 10\n',''),sample)
+            # Should look like the sample slightly renumbered
+            self.assertEqual(m.if1,canonical)
 
         return
 
-    def xtest_nodepragmas(self):
+    def test_nodepragmas(self):
         m = sap.if1.Module()
         g = m.addfunction("main")
         g.sl = 100
@@ -340,7 +350,7 @@ T 10 3 0 7
         self.assertIn('N 1 141 %fn=foo.py %sl=111',m.if1)
         return
 
-    def xtest_edgepragmas(self):
+    def test_edgepragmas(self):
         m = sap.if1.Module()
         g = m.addfunction("main")
 
@@ -379,12 +389,11 @@ T 10 3 0 7
 L     0 1 4 "3" %na=x
 E 0 1 0 2 4 %mk=K
 E 0 2 0 3 4 %mk=Z %na=y %zz=shared
-E 0 2 0 4 4 %mk=Q %na=y %zz=shared
-''',g.if1)
+E 0 2 0 4 4 %mk=Q %na=y %zz=shared''',g.if1)
 
         return
 
-    def xtest_outports(self):
+    def test_outports(self):
         m = sap.if1.Module()
         g = m.addfunction("main")
         g[1] = m.integer
@@ -469,7 +478,7 @@ E 0 2 0 4 4 %mk=Q %na=y %zz=shared
 
         return
 
-    def xtest_outputs(self):
+    def test_outputs(self):
         m = sap.if1.Module()
         g = m.addfunction("main")
         g[1] = m.integer
@@ -477,10 +486,10 @@ E 0 2 0 4 4 %mk=Q %na=y %zz=shared
         self.assertEqual(g[1],g[1])
         self.assertNotEqual(g[1],g[2])
 
-        self.assertEqual(g.outputs,[g[1],g[2]])
+        self.assertEqual(g.outputs,(g[1],g[2]))
         return
         
-    def xtest_inputs(self):
+    def test_inputs(self):
         m = sap.if1.Module()
         g = m.addfunction("main")
         g(1) << 1
@@ -488,7 +497,7 @@ E 0 2 0 4 4 %mk=Q %na=y %zz=shared
         self.assertEqual(g(1),g(1))
         self.assertNotEqual(g(1),g(2))
 
-        self.assertEqual(g.inputs,[g(1),g(2)])
+        self.assertEqual(g.inputs,(g(1),g(2)))
         return
 
     def test_empty_module(self):
@@ -800,11 +809,37 @@ T 10 7 1 9
         self.assertEqual(str(f[1]),'XGraph:1')
         return
 
-if __name__ == '__main__':
-    unittest.main()
+    def test_graphwire(self):
+        m = sap.if1.Module()
+        f = m.addfunction("main")
+        f[1] = m.integer
+        f[1].zz = 10  # These are secondary
+        f[1].mk = 4
+        f(1) << f[1]
+        f(1).mk = 3 # These are primary
+        f(1).na = 'x'
+        self.assertEqual(f.if1,'''X 11 "main"
+E 0 1 0 1 4 %mk=3 %na=x %zz=10''')
+        return
 
-    if 0:
-        import doctest
-        doctest.testmod()
-        unittest.main()
+    def test_addnode(self):
+        m = sap.if1.Module()
+        f = m.addfunction("main")
+        f[1] = f[2] = m.integer
+        plus = f.addnode(sap.if1.IFPlus)
+        plus[1] = m.integer
+        plus(1) << f[1]
+        plus(2) << f[2]
+        f(1) << plus[1]
+        self.assertEqual(f.if1,'''X 12 "main"
+E 1 1 0 1 4
+N 1 141
+E 0 1 1 1 4
+E 0 2 1 2 4''')
+        return
+
+if __name__ == '__main__':
+    import doctest
+    doctest.testmod()
+    unittest.main()
     

@@ -261,6 +261,184 @@ PyObject* module::get_pragmas(PyObject* pySelf,void*) {
   return cxx->pragmas.incref();
 }
 
+static char parse_if1_line(PyObject* line,std::vector<long>& longs,std::vector<std::string>& strings) {
+  longs.clear();
+  strings.clear();
+  PyObject* linesplit /*owned*/ = PyObject_CallMethod(line,(char*)"split",(char*)"");
+  if (!linesplit) return 0;
+  for(ssize_t i=0; i < PyList_GET_SIZE(linesplit); ++i) {
+    PyObject* token /*borrowed*/ = PyList_GET_ITEM(linesplit,i);
+    PyObject* asInt /*owned*/ = PyNumber_Int(token);
+    if (asInt) {
+      long ival = PyInt_AsLong(asInt);
+      Py_DECREF(asInt);
+      longs.push_back(ival);
+    } else {
+      PyErr_Clear();
+      strings.push_back(std::string(PyString_AS_STRING(token),PyString_GET_SIZE(token)));
+    }
+  }
+  if (strings.size() == 0) return 0;
+  return strings[0][0];
+}
+
+// Remove blank lines
+bool module::strip_blanks(PyObject* lines) {
+  STATIC_STR(STRIP,"strip");
+  for(ssize_t i=0;i<PyList_GET_SIZE(lines);) {
+    PyObject* s = PyList_GET_ITEM(lines,i);
+    PyOwned stripped(PyObject_CallMethodObjArgs(s,STRIP,nullptr));
+    if (!stripped) return false;
+    if (PyString_GET_SIZE(stripped.borrow()) > 0) {
+      Py_DECREF(s);
+      PyList_SET_ITEM(lines,i,stripped.incref());
+      ++i;
+    } else {
+      if (PySequence_DelItem(lines,i) < 0) return false;
+    }
+  }
+  return true;
+}
+
+bool module::read_types(PyObject* lines,
+			std::map<long,std::shared_ptr<type>>& typemap) {
+
+  // a quick lambda to make sure a type exists
+  auto fix = [&](long x) {
+    std::shared_ptr<type> result;
+    if (x <= 0) return result;
+    auto p = typemap.find(x);
+    if (p != typemap.end()) return p->second;
+    result = typemap[x] = std::make_shared<type>(IF_Wild);
+    return result;
+  };
+  
+  // Here, we know we have no empty strings so we can
+  // pull out the type lines
+  for(ssize_t i=0;i<PyList_GET_SIZE(lines);++i) {
+    std::vector<long> longs;
+    std::vector<std::string> strings;
+    PyObject* T = PyList_GET_ITEM(lines,i);
+    char flavor = parse_if1_line(T,longs,strings);
+    if (!flavor) return false;
+    if (flavor != 'T') continue;
+    if (longs.size() < 2) {
+      PyErr_Format(PyExc_TypeError,"bad type line: %s",
+		   PyString_AS_STRING(T));
+      return false;
+    }
+
+    auto label = longs[0];
+    auto code = longs[1];
+    auto type = fix(label);
+    switch(code) {
+    case IF_Basic:
+      if (longs.size() != 3) {
+	PyErr_Format(PyExc_ValueError,
+		     "Invalid basic type label %ld",
+		     label);
+	return false;
+      }
+      type->code = code;
+      type->aux = longs[2];
+      break;
+    case IF_Array:
+    case IF_Multiple:
+    case IF_Record:
+    case IF_Stream:
+    case IF_Union:
+      if (longs.size() != 3) {
+	PyErr_Format(PyExc_ValueError,
+		     "Invalid container type label %ld",
+		     label);
+	return false;
+      }
+      type->code = code;
+      type->parameter1 = fix(longs[2]);
+      break;
+    case IF_Field:
+    case IF_Tag:
+    case IF_Tuple:
+      if (longs.size() != 4 || longs[2] <= 0) {
+	PyErr_Format(PyExc_ValueError,
+		     "Invalid chain type label %ld",
+		     label);
+	return false;
+      }
+      type->code = code;
+      type->parameter1 = fix(longs[2]);
+      type->parameter2 = fix(longs[3]);
+      break;
+
+    case IF_Function:
+      if (longs.size() != 4 || longs[3] <= 0) {
+	PyErr_Format(PyExc_ValueError,
+		     "Invalid function type label %ld",
+		     label);
+	return false;
+      }
+      type->code = code;
+      type->parameter1 = fix(longs[2]);
+      type->parameter2 = fix(longs[3]);
+      break;
+    case IF_Wild:
+      if (longs.size() != 2) {
+	PyErr_Format(PyExc_ValueError,
+		     "Invalid wild type label %ld",
+		     label);
+	return false;
+      }
+      type->code = code;
+      break;
+    default:
+      PyErr_Format(PyExc_TypeError,
+		   "unknown typecode %ld %ld",label,code);
+      return false;
+    }
+
+    for(auto& x:strings) {
+      char const* p = x.c_str();
+      if (x.size() < 4) continue;
+      if (x[0] != '%') continue;
+      if (x[3] != '=') continue;
+      PyOwned key(PyString_FromStringAndSize(p+1,2));
+      if (!key) return false;
+      PyOwned value(PyString_FromString(p+4));
+      if (!value) return false;
+      PyOwned ivalue(PyNumber_Int(value.borrow()));
+      if (ivalue) {
+	PyDict_SetItem(type->pragmas.borrow(),key.borrow(),ivalue.borrow());
+      } else {
+	PyErr_Clear();
+	PyDict_SetItem(type->pragmas.borrow(),key.borrow(),value.borrow());
+      }
+    }
+  }
+
+  // Now, we connect the types to the module and
+  // append them to the type list
+  auto cxx = shared();
+  for(auto x:typemap) {
+    std::shared_ptr<type>& T = x.second;
+    T->weakmodule = cxx;
+    PyOwned element(T->package());
+    if (PyList_Append(types.borrow(),element.borrow()) < 0) {
+      return false;
+    }
+  }
+  return true;
+}
+bool module::read_pragmas(PyObject* lines) {
+  for(ssize_t i=0;i<PyList_GET_SIZE(lines);++i) {
+  }
+  return true;
+}
+bool module::read_functions(PyObject* lines,std::map<long,std::shared_ptr<type>>& typemap) {
+  for(ssize_t i=0;i<PyList_GET_SIZE(lines);++i) {
+  }
+  return true;
+}
+
 int module::init(PyObject* pySelf,PyObject* args,PyObject* kwargs) {
   auto status = IF1<module>::init(pySelf,args,kwargs);
   if (status < 0) return status;
@@ -271,9 +449,13 @@ int module::init(PyObject* pySelf,PyObject* args,PyObject* kwargs) {
   if (!PyArg_ParseTupleAndKeywords(args,kwargs,"|O!",keywords,&PyString_Type,&source)) throw PyErr_Occurred();
 
   if (source) {
-    //PyObject* split /*owned*/ = PyObject_CallMethod(source,(char*)"split",(char*)"s","\n");
-    //if (!split) return -1;
-    //if (module_read_types(self,split) != 0) { Py_DECREF(split); return -1; }
+    PyOwned split(PyObject_CallMethod(source,(char*)"split",(char*)"s","\n"));
+    std::map<long,std::shared_ptr<type>> typemap;
+    if (!split) return -1;
+    if (!cxx->strip_blanks(split.borrow())) return -1;
+    if (!cxx->read_types(split.borrow(),typemap)) return -1;
+    if (!cxx->read_pragmas(split.borrow())) return -1;
+    if (!cxx->read_functions(split.borrow(),typemap)) return -1;
   } else {
 
     // We create the built in types here (not in c'tor) because we need to set a weak

@@ -1,35 +1,12 @@
 #include "graph.h"
 #include "inport.h"
+#include "outport.h"
 #include "module.h"
 #include "type.h"
 
 PyTypeObject graph::Type;
 
 void graph::setup() {
-  Type.tp_call = graph::call;
-}
-
-PyObject* graph::call(PyObject* self,PyObject* args,PyObject* kwargs) {
-  auto cxx = reinterpret_cast<python*>(self)->cxx;
-
-  long port;
-  char* keywords[] = {(char*)"port",nullptr};
-  if (!PyArg_ParseTupleAndKeywords(args,kwargs,"l",keywords,&port)) return nullptr;
-  if (port <= 0) {
-    return PyErr_Format(PyExc_TypeError,"invalid port %ld",port);
-  }
-
-  // We either have a port here or we must make one
-  auto p = cxx->inputs.find(port);
-  std::shared_ptr<inport> E;
-  if (p != cxx->inputs.end()) {
-    E = p->second;
-  }
-  else {
-    E = cxx->inputs[port] = std::make_shared<inport>(cxx);
-  }
-
-  return E->package();
 }
 
 PyTypeObject* graph::basetype() {
@@ -40,8 +17,27 @@ char const* graph::doc = "TBD Graph";
 long graph::flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE;
 
 PyMethodDef graph::methods[] = {
+  {(char*)"addnode",graph::addnode,METH_O,(char*)"TBD addnode"},
   {nullptr}
 };
+
+PyObject* graph::addnode(PyObject* self, PyObject* arg) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  
+  long opcode = PyInt_AsLong(arg);
+  if (opcode < 0 && PyErr_Occurred()) return nullptr;
+
+  auto N = std::make_shared<node>(opcode,cxx);
+
+  PyOwned node(N->package());
+  if (!node) return nullptr;
+
+  if (PyList_Append(cxx->children.borrow(),node.borrow()) < 0) {
+    return nullptr;
+  }
+
+  return node.incref();
+}
 
 PyGetSetDef graph::getset[] = {
   {(char*)"name",graph::get_name,graph::set_name,(char*)"TBD",nullptr},
@@ -100,7 +96,17 @@ PyObject* graph::my_type() {
   PyOwned ins(PyTuple_New(inarity));
   if (!ins) return nullptr;
   for(ssize_t port=1; port <= inarity; ++port) {
-    return TODO("function inputs");
+    auto p = outputs.find(port);
+    if (p == outputs.end()) {
+      return PyErr_Format(PyExc_ValueError,"function graph is missing an edge flowing from port %zd",port);
+    }
+    auto T = p->second->weaktype.lock();
+    if (!T) {
+      return PyErr_Format(PyExc_ValueError,"function graph with disconnected type at  port %zd",port);
+    }
+    auto P = T->lookup();
+    Py_INCREF(P);
+    PyTuple_SET_ITEM(ins.borrow(),port-1,P);
   }
   PyOwned itup(PyObject_Call(atc.borrow(),ins.borrow(),nullptr));
   if (!itup) return nullptr;
@@ -122,9 +128,13 @@ PyObject* graph::get_type(PyObject* self,void*) {
 }
 
 PyObject* graph::get_nodes(PyObject* self,void*) {
-  return TODO("get nodes");
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  return cxx->children.incref();
 }
 PyObject* graph::get_if1(PyObject* self,void*) {
+  STATIC_STR(NL,"\n");
+  STATIC_STR(IF1,"if1");
+
   auto cxx = reinterpret_cast<python*>(self)->cxx;
 
   // TODO: Have to deal with I graphs
@@ -160,6 +170,15 @@ PyObject* graph::get_if1(PyObject* self,void*) {
   PyString_Concat(result.addr(),edges.borrow());
   if (!result) return nullptr;
 
+  // Finally, all the nodes have to be emitted
+  for(ssize_t i=0;i<PyList_GET_SIZE(cxx->children.borrow()); ++i) {
+    PyString_Concat(result.addr(),NL);
+    PyObject* T = PyList_GET_ITEM(cxx->children.borrow(),i);
+    PyObject* N_if1 = PyObject_GetAttr(T,IF1);
+    if (!N_if1) return nullptr;
+    PyString_ConcatAndDel(result.addr(),N_if1);
+  }
+
   return result.incref();
 }
 
@@ -168,7 +187,7 @@ PyObject* graph::string(PyObject*) {
 }
 
 graph::operator long() {
-  throw TODO("long");
+  return 0;
 }
 
 PyObject* graph::lookup() {

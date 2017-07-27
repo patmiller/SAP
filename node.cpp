@@ -1,6 +1,16 @@
 #include "node.h"
 #include "type.h"
+#include "inport.h"
 #include "outport.h"
+
+void node::setup() {
+  as_sequence.sq_length = length;
+  as_sequence.sq_item = item;
+  as_sequence.sq_ass_item = ass_item;
+
+  Type.tp_call = call;
+
+}
 
 std::map<long,std::string> nodebase::opcode_to_name;
 std::map<std::string,long> nodebase::name_to_opcode;
@@ -13,6 +23,29 @@ PyMethodDef node::methods[] = {
   {nullptr}
 };
 
+PyObject* node::call(PyObject* self,PyObject* args,PyObject* kwargs) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+
+  long port;
+  char* keywords[] = {(char*)"port",nullptr};
+  if (!PyArg_ParseTupleAndKeywords(args,kwargs,"l",keywords,&port)) return nullptr;
+  if (port <= 0) {
+    return PyErr_Format(PyExc_TypeError,"invalid port %ld",port);
+  }
+
+  // We either have a port here or we must make one
+  auto p = cxx->inputs.find(port);
+  std::shared_ptr<inport> E;
+  if (p != cxx->inputs.end()) {
+    E = p->second;
+  }
+  else {
+    E = cxx->inputs[port] = std::make_shared<inport>(cxx);
+  }
+
+  return E->package();
+}
+
 PyGetSetDef node::getset[] = {
   {(char*)"opcode",node::get_opcode,node::set_opcode,(char*)"TBD",nullptr},
   {(char*)"children",node::get_children,nullptr,(char*)"TBD",nullptr},
@@ -23,27 +56,74 @@ PyGetSetDef node::getset[] = {
   {nullptr}
 };
 
-PyObject* node::get_opcode(PyObject* pySelf,void*) {
-  return TODO("get_opcode");
+PyObject* node::get_opcode(PyObject* self,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  return PyInt_FromLong(cxx->opcode);
 }
-int node::set_opcode(PyObject* pySelf,PyObject*,void*) {
-  TODO("set_if1");
-  return -1;
+int node::set_opcode(PyObject* self,PyObject* op,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  long opcode = PyInt_AsLong(op);
+  if (opcode < 0 && PyErr_Occurred()) return -1;
+  cxx->opcode = opcode;
+  return 0;
 }
-PyObject* node::get_children(PyObject* pySelf,void*) {
-  return TODO("get_children");
+PyObject* node::get_children(PyObject* self,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  return cxx->children.incref();
 }
-PyObject* node::get_pragmas(PyObject* pySelf,void*) {
-  return TODO("get_pragmas");
+PyObject* node::get_pragmas(PyObject* self,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  return cxx->pragmas.incref();
 }
-PyObject* node::get_if1(PyObject* pySelf,void*) {
-  return TODO("get_if1");
+
+PyObject* node::get_if1(PyObject* self,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+
+  long label = cxx->operator long();
+
+  // Compounds are different
+  if (PyList_GET_SIZE(cxx->children.borrow())) {
+    return TODO("node compound if1");
+  }
+
+  PyOwned result(PyString_FromFormat("N %ld %ld",
+				     label,
+				     cxx->opcode));
+  PyOwned prags(pragma_string(cxx->pragmas.borrow()));
+  if (!prags) return nullptr;
+
+  // We also need the input edges (we are label 0)
+  PyOwned edges(cxx->edge_if1(label));
+  if (!edges) return nullptr;
+  
+
+  PyString_Concat(result.addr(),prags.borrow());
+  if (!result) return nullptr;
+  PyString_Concat(result.addr(),edges.borrow());
+  if (!result) return nullptr;
+
+  return result.incref();
 }
-PyObject* node::get_inputs(PyObject* pySelf,void*) {
-  return TODO("get_inputs");
+
+PyObject* node::get_inputs(PyObject* self,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  ssize_t arity = cxx->inputs.size();
+  PyOwned tup(PyTuple_New(arity));
+  ssize_t i=0;
+  for(auto x:cxx->inputs) {
+    PyTuple_SET_ITEM(tup.borrow(),i++,x.second->package());
+  }
+  return tup.incref();
 }
-PyObject* node::get_outputs(PyObject* pySelf,void*) {
-  return TODO("get_outputs");
+PyObject* node::get_outputs(PyObject* self,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  ssize_t arity = cxx->outputs.size();
+  PyOwned tup(PyTuple_New(arity));
+  ssize_t i=0;
+  for(auto x:cxx->outputs) {
+    PyTuple_SET_ITEM(tup.borrow(),i++,x.second->package());
+  }
+  return tup.incref();
 }
 
 PyObject* node::string(PyObject*) {
@@ -82,11 +162,6 @@ int node::ass_item(PyObject* self,ssize_t idx,PyObject* rhs) {
   return 0;
 }
 
-void node::setup() {
-  as_sequence.sq_length = length;
-  as_sequence.sq_item = item;
-  as_sequence.sq_ass_item = ass_item;
-}
 
 node::node(python* self, PyObject* args,PyObject* kwargs)
 {

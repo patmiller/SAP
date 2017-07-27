@@ -4,6 +4,7 @@
 
 void outport::setup() {
   as_number.nb_int = (unaryfunc)get_port;
+  Type.tp_richcompare = richcompare;
 }
 
 PyTypeObject outport::Type;
@@ -58,8 +59,9 @@ PyObject* outport::get_type(PyObject* self,void*) {
 PyObject* outport::get_edges(PyObject*,void*) {
   return TODO("edges");
 }
-PyObject* outport::get_pragmas(PyObject*,void*) {
-  return TODO("pragmas");
+PyObject* outport::get_pragmas(PyObject* self,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  return cxx->pragmas.incref();
 }
 
 outport::operator long() {
@@ -69,6 +71,34 @@ outport::operator long() {
     if (x.second.get() == this) return x.first;
   }
   return 0;
+}
+
+PyObject* outport::richcompare(PyObject* self,PyObject* other,int op) {
+  // Only compare to other outports
+  if (!PyObject_TypeCheck(other,&outport::Type)) return Py_NotImplemented;
+
+  std::shared_ptr<outport> left;
+  std::shared_ptr<outport> right;
+
+  PyObject* yes = Py_True;
+  PyObject* no = Py_False;
+
+  switch(op) {
+  case Py_LT:
+  case Py_LE:
+  case Py_GT:
+  case Py_GE:
+    return Py_NotImplemented;
+  case Py_NE:
+    yes = Py_False;
+    no = Py_True;
+  case Py_EQ:
+    left = reinterpret_cast<python*>(self)->cxx;
+    right = reinterpret_cast<python*>(other)->cxx;
+    if (left.get() == right.get()) return yes;
+    return no;
+  }
+  return nullptr;
 }
 
 outport::outport(python* self, PyObject* args,PyObject* kwargs)

@@ -17,6 +17,8 @@ class node : public nodebase, public IF1<node> {
 
   virtual PyObject* string(PyObject*) override;
 
+  static PyObject* call(PyObject*,PyObject*,PyObject*);
+
   static PyObject* get_opcode(PyObject*,void*);
   static int set_opcode(PyObject*,PyObject*,void*);
   static PyObject* get_children(PyObject*,void*);

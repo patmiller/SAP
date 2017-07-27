@@ -21,15 +21,13 @@ class graph : public nodebase, public IF1<graph> {
   static long flags;
   static PyTypeObject* basetype();
 
-  static PyObject* call(PyObject*,PyObject*,PyObject*);
-
   virtual PyObject* string(PyObject*) override;
 
   virtual PyObject* lookup() override;
 
   virtual operator long() override;
 
-  PyObject* addnode(PyObject*,PyObject*);
+  static PyObject* addnode(PyObject*,PyObject*);
 
   static PyObject* get_name(PyObject*,void*);
   static int set_name(PyObject*,PyObject*,void*);

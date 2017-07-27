@@ -15,6 +15,7 @@ char const* inport::doc = "TBD Inport";
 void inport::setup() {
   as_number.nb_int = (unaryfunc)get_port;
   as_number.nb_lshift = lshift;
+  Type.tp_richcompare = richcompare;
 }
 
 PyMethodDef inport::methods[] = {
@@ -55,11 +56,21 @@ PyObject* inport::get_literal(PyObject* self,void*) {
 }
 
 std::shared_ptr<type> inport::my_type() {
-  if (literal.size() == 0) {
-    throw TODO("type for full edges");
+  // Literals harvest type directly
+  if (literal.size()) {
+    auto tp = weakliteral_type.lock();
+    return tp;
   }
-  auto tp = weakliteral_type.lock();
-  return tp;
+
+  // Full edges can ask the source
+  if (weakport.use_count()) {
+    auto op = weakport.lock();
+    if (!op) return nullptr;
+    return op->weaktype.lock();
+  }
+
+  // Edge was never connected
+  return nullptr;
 }
 
 // ----------------------------------------------------------------------
@@ -92,8 +103,13 @@ PyObject* inport::lshift(PyObject* self, PyObject* other) {
   literal_parser_state_t flavor = ERROR;
   std::string literal;
 
-  // Boolean literal?
-  if ( other == Py_True ) {
+  // If it is None, we delete the edge
+  if ( other == Py_None ) {
+    return TODO("delete inedge");
+  }
+
+  // Some kind of literal?
+  else if ( other == Py_True ) {
     flavor = BOOLEAN_LITERAL;
     literal = "true";
   } else if ( other == Py_False ) {
@@ -124,9 +140,22 @@ PyObject* inport::lshift(PyObject* self, PyObject* other) {
       return PyErr_Format(PyExc_ValueError,"invalid literal %s",PyString_AS_STRING(other));
     }
     literal = PyString_AS_STRING(other);
-  } else if ( PyObject_TypeCheck(other,&outport::Type) ) {
-    return PyErr_Format(PyExc_ValueError,"gotta fix output port lshift");
-  } else {
+  }
+
+  // An out port?
+  else if ( PyObject_TypeCheck(other,&outport::Type) ) {
+    auto op = reinterpret_cast<outport::python*>(other)->cxx;
+    cxx->literal.clear();
+    cxx->weakliteral_type.reset();
+    cxx->weakport = op;
+
+    auto T = op->weaktype.lock();
+    if (!T) Py_RETURN_NONE;
+    return T->lookup();
+  }
+
+  // Something else?
+  else {
     return Py_NotImplemented;
   }
 
@@ -166,7 +195,6 @@ PyObject* inport::lshift(PyObject* self, PyObject* other) {
     return PyErr_Format(PyExc_NotImplementedError,"parse code %d",flavor);
   }
   
-  if (literal == "16.5") return nullptr;
   PyObject* T = PyDict_GetItemString(m->dict.borrow(),tname);
   if (!(T && PyObject_TypeCheck(T,&type::Type))) {
     return PyErr_Format(PyExc_AttributeError,"module does not define type %s",tname);
@@ -175,7 +203,7 @@ PyObject* inport::lshift(PyObject* self, PyObject* other) {
   auto tp = reinterpret_cast<type::python*>(T)->cxx;
   cxx->literal = literal;
   cxx->weakliteral_type = tp;
-
+  cxx->weakport.reset();
   Py_INCREF(T);
   return T;
 }
@@ -205,13 +233,41 @@ std::shared_ptr<nodebase> inport::my_node() {
   return sp;
 }
 
+PyObject* inport::richcompare(PyObject* self,PyObject* other,int op) {
+  // Only compare to other inports
+  if (!PyObject_TypeCheck(other,&inport::Type)) return Py_NotImplemented;
+
+  std::shared_ptr<inport> left;
+  std::shared_ptr<inport> right;
+
+  PyObject* yes = Py_True;
+  PyObject* no = Py_False;
+
+  switch(op) {
+  case Py_LT:
+  case Py_LE:
+  case Py_GT:
+  case Py_GE:
+    return Py_NotImplemented;
+  case Py_NE:
+    yes = Py_False;
+    no = Py_True;
+  case Py_EQ:
+    left = reinterpret_cast<python*>(self)->cxx;
+    right = reinterpret_cast<python*>(other)->cxx;
+    if (left.get() == right.get()) return yes;
+    return no;
+  }
+  return nullptr;
+}
+
 inport::inport(python* self, PyObject* args,PyObject* kwargs)
 {
   throw PyErr_Format(PyExc_TypeError,"Cannot create InPorts");
 }
 
 inport::inport(std::shared_ptr<nodebase> node)
-  : weaknode(node),oport(-1)
+  : weaknode(node)
 {
   pragmas = PyDict_New();
   if (!pragmas) throw PyErr_Occurred();

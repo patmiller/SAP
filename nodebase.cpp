@@ -2,6 +2,7 @@
 #include "graph.h"
 #include "type.h"
 #include "inport.h"
+#include "outport.h"
 
 nodebase::nodebase(long opcode,std::shared_ptr<nodebase> parent)
   : opcode(opcode),
@@ -23,7 +24,17 @@ PyObject* nodebase::string() {
 }
 
 nodebase::operator long() {
-  throw TODO("long");
+  auto parent = weakparent.lock();
+  if (!parent) return 0;
+
+  for(ssize_t i=0;i<PyList_GET_SIZE(parent->children.borrow());++i) {
+    PyObject* N = PyList_GET_ITEM(parent->children.borrow(),i);
+    if (!PyObject_TypeCheck(N,&node::Type)) continue;
+    auto np = reinterpret_cast<node::python*>(N)->cxx;
+    if (np.get() == this) return i+1;
+  }
+  puts("miss");
+  return 0;
 }
 
 PyObject* nodebase::lookup() {
@@ -43,8 +54,33 @@ PyObject* nodebase::edge_if1(long label) {
     long port = x.first;
     auto& input = *x.second;
 
-    if (input.oport > 0) {
-      return TODO("finish");
+    PyOwned aux;
+
+    if (input.weakport.use_count() > 0) {
+      auto out = input.weakport.lock();
+      if (!out) return PyErr_Format(PyExc_RuntimeError,"disconnected");
+      auto tp = out->weaktype.lock();
+      if (!tp) continue;
+      auto np = out->weaknode.lock();
+      if (!np) continue;
+
+      long slabel = np->operator long();
+      long oport = out->operator long();
+      long typeno = tp->operator long();
+      auto eif1 = PyString_FromFormat("\nE %ld %ld %ld %ld %ld",
+				      slabel,
+				      oport,
+				      label,
+				      port,
+				      typeno);
+      if (!eif1) return nullptr;
+      PyString_ConcatAndDel(if1.addr(),eif1);
+
+      // Add any pragma strings (merging input and output sides)
+      PyObject* prags = inport::pragma_string(input.pragmas.borrow(),out->pragmas.borrow());
+      if (!prags) return nullptr;
+      PyString_ConcatAndDel(if1.addr(),prags);
+
     } else {
       auto tp = input.weakliteral_type.lock();
       if (!tp) continue;
@@ -52,10 +88,14 @@ PyObject* nodebase::edge_if1(long label) {
       auto eif1 = PyString_FromFormat("\nL     %ld %ld %ld \"%s\"",label,port,typeno,input.literal.c_str());
       if (!eif1) return nullptr;
       PyString_ConcatAndDel(if1.addr(),eif1);
+
+      // Add any pragma strings (input side only)
       PyObject* prags = inport::pragma_string(input.pragmas.borrow());
       if (!prags) return nullptr;
       PyString_ConcatAndDel(if1.addr(),prags);
     }
+
+
   }
   return if1.incref();
 }

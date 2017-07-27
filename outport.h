@@ -28,10 +28,15 @@ class outport : public IF1<outport> {
   static PyObject* get_pragmas(PyObject*,void*);
   static PyObject* get_edges(PyObject*,void*);
 
+  static PyObject* richcompare(PyObject*,PyObject*,int);
+
   operator long();
 
   outport(python* self, PyObject* args,PyObject* kwargs);
-  outport(std::shared_ptr<nodebase> node) : weaknode(node) {}
+  outport(std::shared_ptr<nodebase> node) : weaknode(node) {
+    pragmas = PyDict_New();
+    if (!pragmas) throw PyErr_Occurred();
+  }
   
 };
 

@@ -6,14 +6,18 @@
 
 class type;
 class nodebase;
+class outport;
+
 class inport : public IF1<inport> {
 public:
   std::weak_ptr<nodebase> weaknode;
 
+  // For a literal edge
   std::string literal;
   std::weak_ptr<type> weakliteral_type;
-  std::weak_ptr<type> weaksrc;
-  long      oport;
+
+  // For a inter-node edge
+  std::weak_ptr<outport> weakport;
   PyOwned(pragmas);
 
   static long flags;
@@ -30,6 +34,8 @@ public:
   
   long port();
   std::shared_ptr<type> my_type();
+
+  static PyObject* richcompare(PyObject*,PyObject*,int);
 
   static PyObject* lshift(PyObject*,PyObject*);
 
