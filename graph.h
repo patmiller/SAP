@@ -7,9 +7,9 @@
 
 class type;
 class graph : public nodebase, public IF1<graph> {
+ public:
   std::weak_ptr<module> weakmodule;
   std::string name;
- public:
   static PyTypeObject Type;
   static char const* doc;
   static PyMethodDef methods[];
@@ -52,6 +52,9 @@ class graph : public nodebase, public IF1<graph> {
   graph(long opcode,
 	std::shared_ptr<module> module,
 	std::string const& name);
+  graph(long opcode,
+	std::shared_ptr<nodebase> parent);
+
 };
 
 #endif

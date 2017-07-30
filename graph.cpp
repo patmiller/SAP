@@ -16,8 +16,13 @@ PyTypeObject* graph::basetype() {
 char const* graph::doc = "TBD Graph";
 long graph::flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE;
 
+PyObject* addgraph(PyObject* self,PyObject*) {
+  return PyErr_Format(PyExc_TypeError,"invalid for graphs");
+}
+
 PyMethodDef graph::methods[] = {
   {(char*)"addnode",graph::addnode,METH_O,(char*)"TBD addnode"},
+  {(char*)"addgraph",addgraph,METH_VARARGS,(char*)"Not valid for graphs"},
   {nullptr}
 };
 
@@ -218,6 +223,12 @@ graph::graph(long opcode,
   : nodebase(opcode),
     weakmodule(module),
     name(name)
+{
+}
+
+graph::graph(long opcode,
+	     std::shared_ptr<nodebase> parent) 
+  : nodebase(opcode,parent)
 {
 }
 

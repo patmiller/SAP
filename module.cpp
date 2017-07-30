@@ -6,6 +6,10 @@ PyTypeObject module::Type;
 
 char const* module::doc = "TBD Module";
 
+void module::setup() {
+  as_sequence.sq_item = item;
+}
+
 PyMethodDef module::methods[] = {
   {(char*)"addtype",(PyCFunction)module::addtype,METH_VARARGS|METH_KEYWORDS,"add a type"},
     {(char*)"addtypechain",(PyCFunction)module::addtypechain,METH_VARARGS|METH_KEYWORDS,"create a type chain (tuple, tags, fields)"},
@@ -187,6 +191,7 @@ PyGetSetDef module::getset[] = {
   {(char*)"types",module::get_types,nullptr,(char*)"types",nullptr},
   {(char*)"pragmas",module::get_pragmas,nullptr,(char*)"whole program pragma dictionary (char->string)",nullptr},
   {(char*)"functions",module::get_functions,nullptr,(char*)"top level functions",nullptr},
+  {(char*)"opcodes",module::get_opcodes,module::set_opcodes,(char*)"name to opcode map (standard IF1 by default)",nullptr},
   {nullptr}
 };
 
@@ -246,19 +251,27 @@ PyObject* module::get_if1(PyObject* self,void*) {
   return result.incref();
 }
 
-PyObject* module::get_types(PyObject* pySelf,void*) {
-  auto cxx = reinterpret_cast<python*>(pySelf)->cxx;
+PyObject* module::get_types(PyObject* self,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
   return cxx->types.incref();
 }
 
-PyObject* module::get_functions(PyObject* pySelf,void*) {
-  auto cxx = reinterpret_cast<python*>(pySelf)->cxx;
+PyObject* module::get_functions(PyObject* self,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
   return cxx->functions.incref();
 }
 
-PyObject* module::get_pragmas(PyObject* pySelf,void*) {
-  auto cxx = reinterpret_cast<python*>(pySelf)->cxx;
+PyObject* module::get_pragmas(PyObject* self,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
   return cxx->pragmas.incref();
+}
+
+PyObject* module::get_opcodes(PyObject* self,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  return cxx->opcodes.incref();
+}
+int module::set_opcodes(PyObject* self,PyObject* attr,void*) {
+  return -1;
 }
 
 static char parse_if1_line(PyObject* line,std::vector<long>& longs,std::vector<std::string>& strings) {
@@ -439,10 +452,10 @@ bool module::read_functions(PyObject* lines,std::map<long,std::shared_ptr<type>>
   return true;
 }
 
-int module::init(PyObject* pySelf,PyObject* args,PyObject* kwargs) {
-  auto status = IF1<module>::init(pySelf,args,kwargs);
+int module::init(PyObject* self,PyObject* args,PyObject* kwargs) {
+  auto status = IF1<module>::init(self,args,kwargs);
   if (status < 0) return status;
-  auto cxx = reinterpret_cast<python*>(pySelf)->cxx;
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
 
   PyObject* source = nullptr;
   static char* keywords[] = {(char*)"source",nullptr};
@@ -486,10 +499,43 @@ int module::init(PyObject* pySelf,PyObject* args,PyObject* kwargs) {
 
 PyObject* module::getattro(PyObject* o,PyObject* attr) {
   auto cxx = reinterpret_cast<python*>(o)->cxx;
+  // Type lookup?
   PyObject* p /*borrowed*/ = PyDict_GetItem(cxx->dict.borrow(),attr);
   if (p) { Py_INCREF(p); return p; }
+
+  // Opcode lookup?
+  p = PyDict_GetItem(cxx->opcodes.borrow(),attr);
+  if (p) { Py_INCREF(p); return p; }
+
+  // normal lookup
   return PyObject_GenericGetAttr(o,attr);
 }
+
+std::string module::lookup(long code) {
+  PyObject* key;
+  PyObject* value;
+  Py_ssize_t pos = 0;
+  while (PyDict_Next(opcodes.borrow(), &pos, &key, &value)) {
+    if (PyString_Check(key) && PyInt_Check(value) && PyInt_AsLong(value) == code) {
+      return PyString_AS_STRING(key);
+    }
+  }
+  return "";
+}
+
+long module::lookup(std::string const& name) {
+  return 12345;
+}
+
+PyObject* module::item(PyObject* self,ssize_t opcode) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  auto name = cxx->lookup(opcode);
+  if (name.size() == 0) {
+    return PyErr_Format(PyExc_IndexError,"No such opcode %xd",opcode);
+  }
+  return PyString_FromString(name.c_str());
+}
+
 
 module:: module(python* self, PyObject* args,PyObject* kwargs)
   : types(nullptr), pragmas(nullptr), functions(nullptr), dict(nullptr)
@@ -505,6 +551,9 @@ module:: module(python* self, PyObject* args,PyObject* kwargs)
 
   dict = PyDict_New();
   if (!dict) throw PyErr_Occurred();
+
+  Py_INCREF(DEFAULT_OPCODES);
+  opcodes = DEFAULT_OPCODES;
 }
 
 PyNumberMethods module::as_number;

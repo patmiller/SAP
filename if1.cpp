@@ -1,11 +1,15 @@
 #include "Python.h"
 
+#include "IFX.h"
+
 #include "module.h"
 #include "type.h"
 #include "node.h"
 #include "graph.h"
 #include "inport.h"
 #include "outport.h"
+
+PyObject* DEFAULT_OPCODES = nullptr; // See IFX.h
 
 static PyMethodDef IF1_methods[] = {
     {nullptr}  /* Sentinel */
@@ -34,118 +38,99 @@ initif1(void) {
     // ----------------------------------------------------------------------
   // Export macros
   // ----------------------------------------------------------------------
-  PyModule_AddIntMacro(m,IF_Array);
-  PyModule_AddIntMacro(m,IF_Basic);
-  PyModule_AddIntMacro(m,IF_Field);
-  PyModule_AddIntMacro(m,IF_Function);
-  PyModule_AddIntMacro(m,IF_Multiple);
-  PyModule_AddIntMacro(m,IF_Record);
-  PyModule_AddIntMacro(m,IF_Stream);
-  PyModule_AddIntMacro(m,IF_Tag);
-  PyModule_AddIntMacro(m,IF_Tuple);
-  PyModule_AddIntMacro(m,IF_Union);
-  PyModule_AddIntMacro(m,IF_Wild);
-  PyModule_AddIntMacro(m,IF_Boolean);
-  PyModule_AddIntMacro(m,IF_Character);
-  PyModule_AddIntMacro(m,IF_DoubleReal);
-  PyModule_AddIntMacro(m,IF_Integer);
-  PyModule_AddIntMacro(m,IF_Null);
-  PyModule_AddIntMacro(m,IF_Real);
-  PyModule_AddIntMacro(m,IF_WildBasic);
-  PyModule_AddIntMacro(m,IFAAddH);
-  PyModule_AddIntMacro(m,IFAAddL);
-  PyModule_AddIntMacro(m,IFAAdjust);
-  PyModule_AddIntMacro(m,IFABuild);
-  PyModule_AddIntMacro(m,IFACatenate);
-  PyModule_AddIntMacro(m,IFAElement);
-  PyModule_AddIntMacro(m,IFAFill);
-  PyModule_AddIntMacro(m,IFAGather);
-  PyModule_AddIntMacro(m,IFAIsEmpty);
-  PyModule_AddIntMacro(m,IFALimH);
-  PyModule_AddIntMacro(m,IFALimL);
-  PyModule_AddIntMacro(m,IFARemH);
-  PyModule_AddIntMacro(m,IFARemL);
-  PyModule_AddIntMacro(m,IFAReplace);
-  PyModule_AddIntMacro(m,IFAScatter);
-  PyModule_AddIntMacro(m,IFASetL);
-  PyModule_AddIntMacro(m,IFASize);
-  PyModule_AddIntMacro(m,IFAbs);
-  PyModule_AddIntMacro(m,IFBindArguments);
-  PyModule_AddIntMacro(m,IFBool);
-  PyModule_AddIntMacro(m,IFCall);
-  PyModule_AddIntMacro(m,IFChar);
-  PyModule_AddIntMacro(m,IFDiv);
-  PyModule_AddIntMacro(m,IFDouble);
-  PyModule_AddIntMacro(m,IFEqual);
-  PyModule_AddIntMacro(m,IFExp);
-  PyModule_AddIntMacro(m,IFFirstValue);
-  PyModule_AddIntMacro(m,IFFinalValue);
-  PyModule_AddIntMacro(m,IFFloor);
-  PyModule_AddIntMacro(m,IFInt);
-  PyModule_AddIntMacro(m,IFIsError);
-  PyModule_AddIntMacro(m,IFLess);
-  PyModule_AddIntMacro(m,IFLessEqual);
-  PyModule_AddIntMacro(m,IFMax);
-  PyModule_AddIntMacro(m,IFMin);
-  PyModule_AddIntMacro(m,IFMinus);
-  PyModule_AddIntMacro(m,IFMod);
-  PyModule_AddIntMacro(m,IFNeg);
-  PyModule_AddIntMacro(m,IFNoOp);
-  PyModule_AddIntMacro(m,IFNot);
-  PyModule_AddIntMacro(m,IFNotEqual);
-  PyModule_AddIntMacro(m,IFPlus);
-  PyModule_AddIntMacro(m,IFRangeGenerate);
-  PyModule_AddIntMacro(m,IFRBuild);
-  PyModule_AddIntMacro(m,IFRElements);
-  PyModule_AddIntMacro(m,IFRReplace);
-  PyModule_AddIntMacro(m,IFRedLeft);
-  PyModule_AddIntMacro(m,IFRedRight);
-  PyModule_AddIntMacro(m,IFRedTree);
-  PyModule_AddIntMacro(m,IFReduce);
-  PyModule_AddIntMacro(m,IFRestValues);
-  PyModule_AddIntMacro(m,IFSingle);
-  PyModule_AddIntMacro(m,IFTimes);
-  PyModule_AddIntMacro(m,IFTrunc);
-  PyModule_AddIntMacro(m,IFPrefixSize);
-  PyModule_AddIntMacro(m,IFError);
-  PyModule_AddIntMacro(m,IFReplaceMulti);
-  PyModule_AddIntMacro(m,IFConvert);
-  PyModule_AddIntMacro(m,IFCallForeign);
-  PyModule_AddIntMacro(m,IFAElementN);
-  PyModule_AddIntMacro(m,IFAElementP);
-  PyModule_AddIntMacro(m,IFAElementM);
-  PyModule_AddIntMacro(m,IFSGraph);
-  PyModule_AddIntMacro(m,IFLGraph);
-  PyModule_AddIntMacro(m,IFIGraph);
-  PyModule_AddIntMacro(m,IFXGraph);
-  PyModule_AddIntMacro(m,IFLPGraph);
-  PyModule_AddIntMacro(m,IFRLGraph);
 
   // Build the opcode map for Python and for node.cpp
-  PyOwned o2n(PyDict_New());
-  if (!o2n) return;
-  PyOwned n2o(PyDict_New());
-  if (!n2o) return;
-  PyObject* dict = PyModule_GetDict(m);
-  PyObject* key;
-  PyObject* value;
-  Py_ssize_t pos = 0;
-  while (PyDict_Next(dict, &pos, &key, &value)) {
-    if (PyString_Check(key) && PyInt_Check(value) &&
-	PyString_AS_STRING(key)[0] == 'I' &&
-	PyString_AS_STRING(key)[1] == 'F' &&
-	PyString_AS_STRING(key)[2] != '_') {
-      long opcode = PyInt_AS_LONG(value);
-      char const* name = PyString_AS_STRING(key)+2;
-      nodebase::opcode_to_name[opcode] = name;
-      nodebase::name_to_opcode[name] = opcode;
-      PyOwned nm(PyString_FromString(name));
-      PyDict_SetItem(o2n.borrow(),value,nm.borrow());
-      PyDict_SetItem(n2o.borrow(),nm.borrow(),value);
-    }
-  }
+  DEFAULT_OPCODES = PyDict_New();
+  if (!DEFAULT_OPCODES) return;
+    //(insert "\n" (shell-command-to-string "grep IF IFX.h | grep = | awk '{printf \"  PyDict_SetItemString(DEFAULT_OPCODES,\\\"%s\\\",PyInt_FromLong(%s)); if (PyErr_Occurred()) return;\\n\",$1,$1}'"))
+  PyDict_SetItemString(DEFAULT_OPCODES,"IF_Array",PyInt_FromLong(IF_Array)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IF_Basic",PyInt_FromLong(IF_Basic)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IF_Field",PyInt_FromLong(IF_Field)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IF_Function",PyInt_FromLong(IF_Function)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IF_Multiple",PyInt_FromLong(IF_Multiple)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IF_Record",PyInt_FromLong(IF_Record)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IF_Stream",PyInt_FromLong(IF_Stream)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IF_Tag",PyInt_FromLong(IF_Tag)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IF_Tuple",PyInt_FromLong(IF_Tuple)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IF_Union",PyInt_FromLong(IF_Union)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IF_Wild",PyInt_FromLong(IF_Wild)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IF_Boolean",PyInt_FromLong(IF_Boolean)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IF_Character",PyInt_FromLong(IF_Character)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IF_DoubleReal",PyInt_FromLong(IF_DoubleReal)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IF_Integer",PyInt_FromLong(IF_Integer)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IF_Null",PyInt_FromLong(IF_Null)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IF_Real",PyInt_FromLong(IF_Real)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IF_WildBasic",PyInt_FromLong(IF_WildBasic)); if (PyErr_Occurred()) return;
+  
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFIfThenElse",PyInt_FromLong(IFIfThenElse)); if (PyErr_Occurred()) return;
+  
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFAAddH",PyInt_FromLong(IFAAddH)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFAAddL",PyInt_FromLong(IFAAddL)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFAAdjust",PyInt_FromLong(IFAAdjust)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFABuild",PyInt_FromLong(IFABuild)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFACatenate",PyInt_FromLong(IFACatenate)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFAElement",PyInt_FromLong(IFAElement)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFAFill",PyInt_FromLong(IFAFill)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFAGather",PyInt_FromLong(IFAGather)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFAIsEmpty",PyInt_FromLong(IFAIsEmpty)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFALimH",PyInt_FromLong(IFALimH)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFALimL",PyInt_FromLong(IFALimL)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFARemH",PyInt_FromLong(IFARemH)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFARemL",PyInt_FromLong(IFARemL)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFAReplace",PyInt_FromLong(IFAReplace)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFAScatter",PyInt_FromLong(IFAScatter)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFASetL",PyInt_FromLong(IFASetL)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFASize",PyInt_FromLong(IFASize)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFAbs",PyInt_FromLong(IFAbs)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFBindArguments",PyInt_FromLong(IFBindArguments)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFBool",PyInt_FromLong(IFBool)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFCall",PyInt_FromLong(IFCall)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFChar",PyInt_FromLong(IFChar)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFDiv",PyInt_FromLong(IFDiv)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFDouble",PyInt_FromLong(IFDouble)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFEqual",PyInt_FromLong(IFEqual)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFExp",PyInt_FromLong(IFExp)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFFirstValue",PyInt_FromLong(IFFirstValue)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFFinalValue",PyInt_FromLong(IFFinalValue)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFFloor",PyInt_FromLong(IFFloor)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFInt",PyInt_FromLong(IFInt)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFIsError",PyInt_FromLong(IFIsError)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFLess",PyInt_FromLong(IFLess)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFLessEqual",PyInt_FromLong(IFLessEqual)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFMax",PyInt_FromLong(IFMax)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFMin",PyInt_FromLong(IFMin)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFMinus",PyInt_FromLong(IFMinus)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFMod",PyInt_FromLong(IFMod)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFNeg",PyInt_FromLong(IFNeg)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFNoOp",PyInt_FromLong(IFNoOp)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFNot",PyInt_FromLong(IFNot)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFNotEqual",PyInt_FromLong(IFNotEqual)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFPlus",PyInt_FromLong(IFPlus)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFRangeGenerate",PyInt_FromLong(IFRangeGenerate)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFRBuild",PyInt_FromLong(IFRBuild)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFRElements",PyInt_FromLong(IFRElements)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFRReplace",PyInt_FromLong(IFRReplace)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFRedLeft",PyInt_FromLong(IFRedLeft)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFRedRight",PyInt_FromLong(IFRedRight)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFRedTree",PyInt_FromLong(IFRedTree)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFReduce",PyInt_FromLong(IFReduce)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFRestValues",PyInt_FromLong(IFRestValues)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFSingle",PyInt_FromLong(IFSingle)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFTimes",PyInt_FromLong(IFTimes)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFTrunc",PyInt_FromLong(IFTrunc)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFPrefixSize",PyInt_FromLong(IFPrefixSize)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFError",PyInt_FromLong(IFError)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFReplaceMulti",PyInt_FromLong(IFReplaceMulti)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFConvert",PyInt_FromLong(IFConvert)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFCallForeign",PyInt_FromLong(IFCallForeign)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFAElementN",PyInt_FromLong(IFAElementN)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFAElementP",PyInt_FromLong(IFAElementP)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFAElementM",PyInt_FromLong(IFAElementM)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFSGraph",PyInt_FromLong(IFSGraph)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFLGraph",PyInt_FromLong(IFLGraph)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFIGraph",PyInt_FromLong(IFIGraph)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFXGraph",PyInt_FromLong(IFXGraph)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFLPGraph",PyInt_FromLong(IFLPGraph)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFRLGraph",PyInt_FromLong(IFRLGraph)); if (PyErr_Occurred()) return;
 
-  PyModule_AddObject(m,"opnames",o2n.incref());
-  PyModule_AddObject(m,"opcodes",n2o.incref());
 }
-//(insert "\n" (shell-command-to-string "awk '/ IF/{printf \"PyModule_AddIntMacro(m,%s);\\n\", $1}' IFX.h"))

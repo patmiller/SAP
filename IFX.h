@@ -2,6 +2,9 @@
 #define IFX_h
 
 #include "Python.h"
+extern PyObject* DEFAULT_OPCODES;
+
+#include "Python.h"
 #include "structmember.h"
 #include <map>
 #include <vector>
@@ -267,6 +270,11 @@ enum IFBasics {
 };
 
 enum IF1Opcodes {
+  // TODO: Add in the real compound names
+  IFForall = 10,
+  IFIfThenElse = 20,
+  IFIterA = 30,
+  IFIterB = 40,
   IFAAddH = 100,
   IFAAddL = 101,
   IFAAdjust = 102,

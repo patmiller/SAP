@@ -10,6 +10,7 @@ class module : public IF1<module> {
   PyOwned types;
   PyOwned pragmas;
   PyOwned functions;
+  PyOwned opcodes;
   PyOwned dict;
 
   static PyTypeObject Type;
@@ -22,6 +23,8 @@ class module : public IF1<module> {
   static int init(PyObject* pySelf,PyObject* args,PyObject* kwargs);
   static PyObject* getattro(PyObject*,PyObject*);
 
+  static void setup();
+
   static PyObject* addtype(PyObject*,PyObject*,PyObject*);
   static PyObject* addtypechain(PyObject*,PyObject*,PyObject*);
   static PyObject* addfunction(PyObject*,PyObject*);
@@ -30,11 +33,16 @@ class module : public IF1<module> {
   static PyObject* get_types(PyObject*,void*);
   static PyObject* get_functions(PyObject*,void*);
   static PyObject* get_pragmas(PyObject*,void*);
+  static PyObject* get_opcodes(PyObject*,void*);
+  static int set_opcodes(PyObject*,PyObject*,void*);
+  static PyObject* item(PyObject*,ssize_t);
 
   bool strip_blanks(PyObject*);
   bool read_types(PyObject*,std::map<long,std::shared_ptr<type>>& typemap);
   bool read_pragmas(PyObject*);
   bool read_functions(PyObject*,std::map<long,std::shared_ptr<type>>& typemap);
+  std::string lookup(long);
+  long lookup(std::string const&);
 
   module(python* self, PyObject* args,PyObject* kwargs);
   

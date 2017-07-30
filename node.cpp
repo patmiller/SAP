@@ -1,4 +1,5 @@
 #include "node.h"
+#include "graph.h"
 #include "type.h"
 #include "inport.h"
 #include "outport.h"
@@ -12,14 +13,24 @@ void node::setup() {
 
 }
 
-std::map<long,std::string> nodebase::opcode_to_name;
-std::map<std::string,long> nodebase::name_to_opcode;
-
 PyTypeObject node::Type;
 
 char const* node::doc = "TBD Node";
 
+PyObject* node::addgraph(PyObject* self,PyObject* args) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  long opcode = IFSGraph;
+  if (!PyArg_ParseTuple(args,"|l",&opcode)) return nullptr;
+
+  auto gp = std::make_shared<graph>(opcode,cxx);
+  PyOwned result(gp->package());
+  if (!result) return nullptr;
+  if (PyList_Append(cxx->children.borrow(),result.borrow())) return nullptr;
+  return result.incref();
+}
+
 PyMethodDef node::methods[] = {
+  {(char*)"addgraph",node::addgraph,METH_VARARGS,(char*)"TBD"},
   {nullptr}
 };
 
@@ -77,18 +88,32 @@ PyObject* node::get_pragmas(PyObject* self,void*) {
 }
 
 PyObject* node::get_if1(PyObject* self,void*) {
+  STATIC_STR(NL,"\n");
   auto cxx = reinterpret_cast<python*>(self)->cxx;
 
   long label = cxx->operator long();
+  long opcode = cxx->opcode;
+  PyOwned result;
 
   // Compounds are different
-  if (PyList_GET_SIZE(cxx->children.borrow())) {
-    return TODO("node compound if1");
+  if (!PyList_GET_SIZE(cxx->children.borrow())) {
+    result = PyString_FromFormat("N %ld %ld",label,opcode);
+  } else {
+    result = PyString_FromString("{\n");
+    PyOwned tail(PyString_FromFormat("} %ld %ld",label,opcode));
+    for(ssize_t i=0;i<PyList_GET_SIZE(cxx->children.borrow());++i) {
+      auto G = PyList_GET_ITEM(cxx->children.borrow(),i);
+      PyOwned gif1(PyObject_GetAttrString(G,"if1"));
+      if (!gif1) return nullptr;
+      PyString_Concat(result.addr(),gif1.borrow());
+      if (!result) return nullptr;
+      PyString_Concat(result.addr(),NL);
+      if (!result) return nullptr;
+    }
+    PyString_Concat(result.addr(),tail.borrow());
+    if (!result) return nullptr;
   }
 
-  PyOwned result(PyString_FromFormat("N %ld %ld",
-				     label,
-				     cxx->opcode));
   PyOwned prags(pragma_string(cxx->pragmas.borrow()));
   if (!prags) return nullptr;
 

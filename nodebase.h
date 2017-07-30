@@ -17,18 +17,16 @@ public:
   std::map<long,std::shared_ptr<inport>> inputs;
   std::map<long,std::shared_ptr<outport>> outputs;
   
-  nodebase(long opcode=-1,std::shared_ptr<nodebase> parent=nullptr);
-  virtual ~nodebase() {}
-
   PyObject* string();
 
   virtual operator long();
   virtual PyObject* lookup();
   virtual std::shared_ptr<graph> my_graph();
+  virtual std::shared_ptr<module> my_module();
   PyObject* edge_if1(long);
 
-  static std::map<long,std::string> opcode_to_name;
-  static std::map<std::string,long> name_to_opcode;
+  nodebase(long opcode=-1,std::shared_ptr<nodebase> parent=nullptr);
+  virtual ~nodebase() {}
 };
 
 #endif

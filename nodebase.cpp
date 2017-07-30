@@ -1,4 +1,5 @@
 #include "nodebase.h"
+#include "module.h"
 #include "graph.h"
 #include "type.h"
 #include "inport.h"
@@ -16,11 +17,14 @@ nodebase::nodebase(long opcode,std::shared_ptr<nodebase> parent)
 }
 
 PyObject* nodebase::string() {
-  auto p = opcode_to_name.find(opcode);
-  if (p == opcode_to_name.end()) {
+  // Get a handle to our module and use that to look up
+  // the opname
+  auto m = my_module();
+  auto name = m->lookup(opcode);
+  if (name.size() == 0) {
     return PyString_FromFormat("<Node %ld>",opcode);
   }
-  return PyString_FromString(p->second.c_str());
+  return PyString_FromString(name.c_str());
 }
 
 nodebase::operator long() {
@@ -45,6 +49,17 @@ std::shared_ptr<graph> nodebase::my_graph() {
   auto sp = std::dynamic_pointer_cast<graph>(weakparent.lock());
   if (!sp) throw PyErr_Format(PyExc_RuntimeError,"disconnected");
   return sp;
+}
+
+std::shared_ptr<module> nodebase::my_module() {
+  auto sp = weakparent.lock();
+  while(sp) {
+    sp = sp->weakparent.lock();
+  }
+  // Unless disconnected, we've climbed to the top function graph
+  auto gp = std::dynamic_pointer_cast<graph>(sp);
+  if (!gp) return nullptr;
+  return gp->weakmodule.lock();
 }
 
 PyObject* nodebase::edge_if1(long label) {

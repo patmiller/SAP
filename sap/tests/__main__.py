@@ -1,5 +1,5 @@
 """
->>> from sap.if1 import Module,IF_Basic,IF_Array,IF_Stream,IF_Multiple,IF_Tuple,IF_Function
+>>> from sap.if1 import Module
 >>> m = Module()
 >>> m
 <Module>
@@ -11,7 +11,7 @@
 boolean
 >>> m.integer
 integer
->>> r = m.addtype(IF_Basic,3) # doesn't make a new type!
+>>> r = m.addtype(m.IF_Basic,3) # doesn't make a new type!
 >>> r is m.integer
 True
 >>> m.pragmas['C'] = 'IF1 Check'
@@ -19,19 +19,19 @@ True
 >>> m.pragmas['F'] = 'Python Frontend'
 >>> m.types
 [boolean, character, doublereal, integer, null, real, wildbasic, wild, string]
->>> m.addtype(IF_Array,m.integer)
+>>> m.addtype(m.IF_Array,m.integer)
 array[integer]
->>> m.addtype(IF_Stream,m.real)
+>>> m.addtype(m.IF_Stream,m.real)
 stream[real]
->>> m.addtype(IF_Multiple,m.boolean)
+>>> m.addtype(m.IF_Multiple,m.boolean)
 multiple[boolean]
->>> ins = m.addtype(IF_Tuple,m.integer,m.integer)
->>> outs = m.addtype(IF_Tuple,m.real)
->>> m.addtype(IF_Function,ins,outs)
+>>> ins = m.addtype(m.IF_Tuple,m.integer,m.integer)
+>>> outs = m.addtype(m.IF_Tuple,m.real)
+>>> m.addtype(m.IF_Function,ins,outs)
 function[integer->integer returns real]
->>> m.addtype(IF_Function,m.integer,m.real)
+>>> m.addtype(m.IF_Function,m.integer,m.real)
 function[integer returns real]
->>> m.addtype(IF_Function,None,m.real)
+>>> m.addtype(m.IF_Function,None,m.real)
 function[ returns real]
 >>> print m.if1
 T 1 1 0 %na=boolean
@@ -90,7 +90,7 @@ L     0 1 4 "3"''')
         g[1] = m.integer
         g[2] = m.integer
 
-        plus = g.addnode(sap.if1.IFPlus)
+        plus = g.addnode(m.IFPlus)
         plus(1) << g[1]
         plus(2) << g[2]
         plus[1] = m.integer
@@ -274,34 +274,34 @@ T 10 3 0 7
 
             # Make sure the types look right
             self.assertIs(m.bool,m.types[0])
-            self.assertEqual(m.bool.code,sap.if1.IF_Basic)
-            self.assertEqual(m.bool.aux,sap.if1.IF_Boolean)
+            self.assertEqual(m.bool.code,m.IF_Basic)
+            self.assertEqual(m.bool.aux,m.IF_Boolean)
 
             self.assertIs(m.int,m.types[1])
-            self.assertEqual(m.int.code,sap.if1.IF_Basic)
-            self.assertEqual(m.int.aux,sap.if1.IF_Integer)
+            self.assertEqual(m.int.code,m.IF_Basic)
+            self.assertEqual(m.int.aux,m.IF_Integer)
 
-            self.assertEqual(m.types[2].code,sap.if1.IF_Array)
+            self.assertEqual(m.types[2].code,m.IF_Array)
             self.assertIs(m.types[2].parameter1,m.int)
 
-            self.assertEqual(m.types[3].code,sap.if1.IF_Wild)
+            self.assertEqual(m.types[3].code,m.IF_Wild)
             self.assertIs(m.types[3].parameter1,None)
 
-            self.assertEqual(m.types[4].code, sap.if1.IF_Basic)
+            self.assertEqual(m.types[4].code, m.IF_Basic)
 
-            self.assertEqual(m.types[5].code, sap.if1.IF_Tuple)
+            self.assertEqual(m.types[5].code, m.IF_Tuple)
             self.assertIs(m.types[5].parameter1, m.int)
             self.assertIs(m.types[5].parameter2, None)
 
-            self.assertEqual(m.types[6].code, sap.if1.IF_Tuple)
+            self.assertEqual(m.types[6].code, m.IF_Tuple)
             self.assertIs(m.types[6].parameter1, m.int)
             self.assertIs(m.types[6].parameter2, m.types[5])
 
-            self.assertEqual(m.types[7].code, sap.if1.IF_Function)
+            self.assertEqual(m.types[7].code, m.IF_Function)
             self.assertIs(m.types[7].parameter1, m.types[6])
             self.assertIs(m.types[7].parameter2, m.types[5])
 
-            self.assertEqual(m.types[8].code, sap.if1.IF_Function)
+            self.assertEqual(m.types[8].code, m.IF_Function)
             self.assertIs(m.types[8].parameter1, None)
             self.assertIs(m.types[8].parameter2, m.types[5])
 
@@ -325,7 +325,7 @@ T 10 3 0 7
         self.assertIn('sl',g.pragmas)
         self.assertEqual(g.sl,100)
 
-        plus = g.addnode(sap.if1.IFPlus)
+        plus = g.addnode(m.IFPlus)
         plus.sl = 111
         plus.fn = 'foo.py'
         plus(1) << g[1]
@@ -336,7 +336,7 @@ T 10 3 0 7
         self.assertIn('sl',plus.pragmas)
         self.assertEqual(plus.sl,111)
 
-        minus = g.addnode(sap.if1.IFMinus)
+        minus = g.addnode(m.IFMinus)
         minus[1] = m.integer
         minus(1) << plus[1]
         minus(2) << g[2]
@@ -410,7 +410,7 @@ E 0 2 0 4 4 %mk=Q %na=y %zz=shared''',g.if1)
         self.assertEqual(g[2].pragmas,{})
         self.assertEqual(int(g[2]),2)
 
-        plus = g.addnode(sap.if1.IFPlus)
+        plus = g.addnode(m.IFPlus)
         plus[1] = m.integer
         self.assertEqual(int(plus[1]),1)
 
@@ -562,8 +562,8 @@ C$  F Python frontend
         m = sap.if1.Module()
 
         T = m.boolean
-        self.assertEqual(T.code,sap.if1.IF_Basic)
-        self.assertEqual(T.aux,sap.if1.IF_Boolean)
+        self.assertEqual(T.code,m.IF_Basic)
+        self.assertEqual(T.aux,m.IF_Boolean)
         self.assertIs(T.parameter1,None)
         self.assertIs(T.parameter2,None)
 
@@ -596,7 +596,7 @@ C$  F Python frontend
         m = sap.if1.Module()
 
         # If we re-add an existing type, we get the same type back
-        T = m.addtype(sap.if1.IF_Basic,sap.if1.IF_Integer)
+        T = m.addtype(m.IF_Basic,m.IF_Integer)
         self.assertIs(T,m.integer)
 
         # We can delete a type (auto renumbered)
@@ -606,7 +606,7 @@ C$  F Python frontend
         self.assertNotIn(m.integer,m.types)
 
         # Now, we create one like it and it is inserted
-        T = m.addtype(sap.if1.IF_Basic,sap.if1.IF_Integer)
+        T = m.addtype(m.IF_Basic,m.IF_Integer)
         T.name = 'int'
         self.assertIn(T,m.types)
 
@@ -627,20 +627,20 @@ T 9 1 3 %na=int
         'Build our own type table from scratch?'
         m = sap.if1.Module('')
 
-        W = m.addtype(sap.if1.IF_Wild,name="crazy")
+        W = m.addtype(m.IF_Wild,name="crazy")
         self.assertEqual(W.label,1)
 
-        I = m.addtype(sap.if1.IF_Basic,sap.if1.IF_Integer)
+        I = m.addtype(m.IF_Basic,m.IF_Integer)
         self.assertEqual(I.label,2)
-        R = m.addtype(sap.if1.IF_Basic,sap.if1.IF_Real)
+        R = m.addtype(m.IF_Basic,m.IF_Real)
         self.assertEqual(R.label,3)
 
-        m.addtype(sap.if1.IF_Array,I)
-        m.addtype(sap.if1.IF_Multiple,I)
-        m.addtype(sap.if1.IF_Stream,I)
+        m.addtype(m.IF_Array,I)
+        m.addtype(m.IF_Multiple,I)
+        m.addtype(m.IF_Stream,I)
 
-        t0 = m.addtype(sap.if1.IF_Tuple,I)
-        t1 = m.addtype(sap.if1.IF_Tuple,I,t0)
+        t0 = m.addtype(m.IF_Tuple,I)
+        t1 = m.addtype(m.IF_Tuple,I,t0)
 
         self.assertEqual(m.if1,'''T 1 10 %na=crazy
 T 2 1 3
@@ -655,20 +655,18 @@ T 8 8 2 7
 
     def test_typechain(self):
         m = sap.if1.Module('')
-        from sap.if1 import IF_Basic,IF_Integer,IF_Real
-        from sap.if1 import IF_Tuple,IF_Field,IF_Tag
-        I = m.addtype(IF_Basic,IF_Integer,name="int")
-        R = m.addtype(IF_Basic,IF_Real,name="real")
-        empty = m.addtypechain(code=IF_Tuple)
+        I = m.addtype(m.IF_Basic,m.IF_Integer,name="int")
+        R = m.addtype(m.IF_Basic,m.IF_Real,name="real")
+        empty = m.addtypechain(code=m.IF_Tuple)
         self.assertIs(empty,None)
 
-        c1 = m.addtypechain(I,I,R,I,code=IF_Tuple)
+        c1 = m.addtypechain(I,I,R,I,code=m.IF_Tuple)
         self.assertEqual(str(c1),"int->int->real->int")
 
-        s1 = m.addtypechain(I,I,code=IF_Field)
+        s1 = m.addtypechain(I,I,code=m.IF_Field)
         self.assertEqual(str(s1),"int->int")
 
-        u1 = m.addtypechain(I,R,code=IF_Tag)
+        u1 = m.addtypechain(I,R,code=m.IF_Tag)
         self.assertEqual(str(u1),"int->real")
 
         self.assertEqual(m.if1,'''T 1 1 3 %na=int
@@ -693,19 +691,19 @@ T 10 7 1 9
 
     def test_struct_union(self):
         m = sap.if1.Module()
-        s = m.addtype(sap.if1.IF_Record,
-                      m.addtypechain(m.integer,m.real,code=sap.if1.IF_Field))
+        s = m.addtype(m.IF_Record,
+                      m.addtypechain(m.integer,m.real,code=m.IF_Field))
         self.assertEqual(str(s),'record[integer->real]')
         self.assertEqual(s.chain(),(m.integer,m.real))
-        u = m.addtype(sap.if1.IF_Union,
-                      m.addtypechain(m.integer,m.real,code=sap.if1.IF_Tag))
+        u = m.addtype(m.IF_Union,
+                      m.addtypechain(m.integer,m.real,code=m.IF_Tag))
         self.assertEqual(str(u),'union[integer->real]')
         self.assertEqual(u.chain(),(m.integer,m.real))
         return
 
     def test_chainname(self):
         m = sap.if1.Module()
-        c = m.addtypechain(m.integer,m.integer,m.real,code=sap.if1.IF_Tuple,names=('aa','bb','cc'))
+        c = m.addtypechain(m.integer,m.integer,m.real,code=m.IF_Tuple,names=('aa','bb','cc'))
         self.assertEqual(str(c),'aa:integer->bb:integer->cc:real')
         return
 
@@ -713,24 +711,25 @@ T 10 7 1 9
         m = sap.if1.Module()
         ins = m.addtypechain(m.integer,m.real)
         outs = m.addtypechain(m.real)
-        f0 = m.addtype(sap.if1.IF_Function,ins,outs)
+        f0 = m.addtype(m.IF_Function,ins,outs)
         self.assertEqual(str(f0),'function[integer->real returns real]')
 
-        f1 = m.addtype(sap.if1.IF_Function,None,outs)
+        f1 = m.addtype(m.IF_Function,None,outs)
         self.assertEqual(str(f1),'function[ returns real]')
 
         return
 
     def test_opnames_opcodes(self):
-        self.assertEqual(sap.if1.opcodes['Plus'],141)
-        self.assertEqual(sap.if1.opnames[141],'Plus')
+        m = sap.if1.Module()
+        self.assertEqual(m.opcodes['IFPlus'],141)
+        self.assertEqual(m[141],'IFPlus')
         return
 
     def test_barefunction(self):
         m = sap.if1.Module()
         f = m.addfunction("main")
         self.assertEqual(m.functions,[f])
-        self.assertEqual(str(f),'XGraph')
+        self.assertEqual(str(f),'IFXGraph')
         self.assertEqual(f.if1,'X 0 "main"')
         return
 
@@ -738,7 +737,7 @@ T 10 7 1 9
         m = sap.if1.Module()
         f = m.addfunction("main")
         p = f(4)
-        self.assertEqual(str(p),'4:XGraph')
+        self.assertEqual(str(p),'4:IFXGraph')
         self.assertEqual(p.port,4)
         self.assertEqual(int(p),4)
         self.assertIs(p.literal,None)
@@ -806,7 +805,7 @@ T 10 7 1 9
         self.assertIs(f[1].node,f)
         self.assertEqual(f[1].port,1)
         self.assertEqual(int(f[1]),1)
-        self.assertEqual(str(f[1]),'XGraph:1')
+        self.assertEqual(str(f[1]),'IFXGraph:1')
         return
 
     def test_graphwire(self):
@@ -826,7 +825,7 @@ E 0 1 0 1 4 %mk=3 %na=x %zz=10''')
         m = sap.if1.Module()
         f = m.addfunction("main")
         f[1] = f[2] = m.integer
-        plus = f.addnode(sap.if1.IFPlus)
+        plus = f.addnode(m.IFPlus)
         plus[1] = m.integer
         plus(1) << f[1]
         plus(2) << f[2]
@@ -838,8 +837,36 @@ E 0 1 1 1 4
 E 0 2 1 2 4''')
         return
 
+    def xtest_simple_subgraph(self):
+        m = sap.if1.Module()
+        f = m.addfunction("f")
+        f[1] = m.integer
+        s = f.addnode(sap.if1.IfIfThenElse)
+        return
+
+    def test_moduleops(self):
+        m = sap.if1.Module()
+        self.assertIn('IFPlus',m.opcodes)
+        return
+
+    def test_graph_badaddgraph(self):
+        m = sap.if1.Module()
+        f = m.addfunction("f")
+        with self.assertRaises(TypeError):
+            f.addgraph()
+        return
+
 if __name__ == '__main__':
-    import doctest
-    doctest.testmod()
-    unittest.main()
+    m = sap.if1.Module()
+    f = m.addfunction("f")
+    f[1] = m.integer
+    t = f.addnode(m.IFIfThenElse)
+    truepart = t.addgraph()
+    falsepart = t.addgraph()
+    print m.if1
+
+    if 1:
+        import doctest
+        doctest.testmod()
+        unittest.main()
     
