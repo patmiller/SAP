@@ -99,9 +99,14 @@ PyObject* node::get_if1(PyObject* self,void*) {
   if (!PyList_GET_SIZE(cxx->children.borrow())) {
     result = PyString_FromFormat("N %ld %ld",label,opcode);
   } else {
-    result = PyString_FromString("{\n");
-    PyOwned tail(PyString_FromFormat("} %ld %ld",label,opcode));
-    for(ssize_t i=0;i<PyList_GET_SIZE(cxx->children.borrow());++i) {
+    result = PyString_FromFormat("{ Compound %ld %ld \n",label,opcode);
+    ssize_t n = PyList_GET_SIZE(cxx->children.borrow());
+    PyOwned tail(PyString_FromFormat("} %ld %ld %zd",label,opcode,n));
+    for(ssize_t i=0;i<n;++i) {
+      PyOwned graphno(PyString_FromFormat(" %zd",i));
+      if (!graphno) return nullptr;
+      PyString_Concat(tail.addr(),graphno.borrow());
+      if (!tail) return nullptr;
       auto G = PyList_GET_ITEM(cxx->children.borrow(),i);
       PyOwned gif1(PyObject_GetAttrString(G,"if1"));
       if (!gif1) return nullptr;

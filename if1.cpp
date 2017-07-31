@@ -61,9 +61,17 @@ initif1(void) {
   PyDict_SetItemString(DEFAULT_OPCODES,"IF_Null",PyInt_FromLong(IF_Null)); if (PyErr_Occurred()) return;
   PyDict_SetItemString(DEFAULT_OPCODES,"IF_Real",PyInt_FromLong(IF_Real)); if (PyErr_Occurred()) return;
   PyDict_SetItemString(DEFAULT_OPCODES,"IF_WildBasic",PyInt_FromLong(IF_WildBasic)); if (PyErr_Occurred()) return;
-  
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFForall",PyInt_FromLong(IFForall)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFSelect",PyInt_FromLong(IFSelect)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFTagCase",PyInt_FromLong(IFTagCase)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFLoopA",PyInt_FromLong(IFLoopA)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFLoopB",PyInt_FromLong(IFLoopB)); if (PyErr_Occurred()) return;
   PyDict_SetItemString(DEFAULT_OPCODES,"IFIfThenElse",PyInt_FromLong(IFIfThenElse)); if (PyErr_Occurred()) return;
-  
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFIterate",PyInt_FromLong(IFIterate)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFWhileLoop",PyInt_FromLong(IFWhileLoop)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFRepeatLoop",PyInt_FromLong(IFRepeatLoop)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFSeqForall",PyInt_FromLong(IFSeqForall)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFUReduce",PyInt_FromLong(IFUReduce)); if (PyErr_Occurred()) return;
   PyDict_SetItemString(DEFAULT_OPCODES,"IFAAddH",PyInt_FromLong(IFAAddH)); if (PyErr_Occurred()) return;
   PyDict_SetItemString(DEFAULT_OPCODES,"IFAAddL",PyInt_FromLong(IFAAddL)); if (PyErr_Occurred()) return;
   PyDict_SetItemString(DEFAULT_OPCODES,"IFAAdjust",PyInt_FromLong(IFAAdjust)); if (PyErr_Occurred()) return;
@@ -132,5 +140,4 @@ initif1(void) {
   PyDict_SetItemString(DEFAULT_OPCODES,"IFXGraph",PyInt_FromLong(IFXGraph)); if (PyErr_Occurred()) return;
   PyDict_SetItemString(DEFAULT_OPCODES,"IFLPGraph",PyInt_FromLong(IFLPGraph)); if (PyErr_Occurred()) return;
   PyDict_SetItemString(DEFAULT_OPCODES,"IFRLGraph",PyInt_FromLong(IFRLGraph)); if (PyErr_Occurred()) return;
-
 }

@@ -270,11 +270,17 @@ enum IFBasics {
 };
 
 enum IF1Opcodes {
-  // TODO: Add in the real compound names
-  IFForall = 10,
-  IFIfThenElse = 20,
-  IFIterA = 30,
-  IFIterB = 40,
+  IFForall = 0,
+  IFSelect = 1,
+  IFTagCase = 2,
+  IFLoopA = 3,
+  IFLoopB = 4,
+  IFIfThenElse = 5,
+  IFIterate = 6,
+  IFWhileLoop = 7,
+  IFRepeatLoop = 8,
+  IFSeqForall = 9,
+  IFUReduce = 10,
   IFAAddH = 100,
   IFAAddL = 101,
   IFAAdjust = 102,
