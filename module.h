@@ -45,7 +45,6 @@ class module : public IF1<module> {
   long lookup(std::string const&);
 
   module(python* self, PyObject* args,PyObject* kwargs);
-  
 };
 
 #endif

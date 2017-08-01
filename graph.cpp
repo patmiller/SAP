@@ -53,11 +53,23 @@ PyGetSetDef graph::getset[] = {
 };
 
 PyObject* graph::get_name(PyObject* self,void*) {
-  return TODO("get name");
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  std::string& name = cxx->name;
+  if (name.size() == 0) Py_RETURN_NONE;
+  return PyString_FromStringAndSize(name.c_str(),name.size());
 }
-int graph::set_name(PyObject* self,PyObject*,void*) {
-  TODO("set name");
-  return -1;
+int graph::set_name(PyObject* self,PyObject* name,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  if (name == nullptr || name == Py_None) {
+    cxx->name = "";
+    return 0;
+  }
+  if (!PyString_Check(name)) {
+    PyErr_SetString(PyExc_TypeError,"name must be a string");
+    return -1;
+  }
+  cxx->name = PyString_AS_STRING(name);
+  return 0;
 }
 
 PyObject* graph::my_type() {
@@ -142,8 +154,13 @@ PyObject* graph::get_if1(PyObject* self,void*) {
 
   auto cxx = reinterpret_cast<python*>(self)->cxx;
 
-  // TODO: Have to deal with I graphs
-  char tag = (cxx->opcode == IFXGraph)?'X':'G';
+  // Pick the tag to use
+  char tag = 'G';
+  switch(cxx->opcode) {
+  case IFXGraph: tag = 'X'; break;
+  case IFIGraph: tag = 'I'; break;
+  default: ;
+  }
 
   // Compute the type for this graph
   PyOwned graphtype(cxx->my_type());
@@ -209,7 +226,20 @@ PyObject* graph::lookup() {
       }
     }
   }
-  return TODO("graph lookup");
+
+  // Must be a subgraph of a compound
+  auto parent = weakparent.lock();
+  if (!parent) return PyErr_Format(PyExc_RuntimeError,"disconnected");
+  for(ssize_t i=0;i<PyList_GET_SIZE(parent->children.borrow());++i) {
+    PyObject* G = PyList_GET_ITEM(parent->children.borrow(),i);
+    if (PyObject_TypeCheck(G,&graph::Type) &&
+	reinterpret_cast<graph::python*>(G)->cxx.get() == this) {
+      Py_INCREF(G);
+      return G;
+    }
+  }
+      
+  return PyErr_Format(PyExc_RuntimeError,"disconnected");
 }
 
 graph::graph(python* self, PyObject* args,PyObject* kwargs)

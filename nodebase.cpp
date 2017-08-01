@@ -20,7 +20,7 @@ PyObject* nodebase::string() {
   // Get a handle to our module and use that to look up
   // the opname
   auto m = my_module();
-  auto name = m->lookup(opcode);
+  auto name = m?m->lookup(opcode):"";
   if (name.size() == 0) {
     return PyString_FromFormat("<Node %ld>",opcode);
   }
@@ -42,7 +42,19 @@ nodebase::operator long() {
 }
 
 PyObject* nodebase::lookup() {
-  return TODO("node lookup");
+  // Plain nodes here must be inside a graph (the parent)
+  auto np = weakparent.lock();
+  if (!np) return PyErr_Format(PyExc_RuntimeError,"disconnected");
+  auto gp = std::dynamic_pointer_cast<graph>(np);
+  if (!gp) return PyErr_Format(PyExc_RuntimeError,"disconnected");
+  for(ssize_t i=0;i<PyList_GET_SIZE(gp->children.borrow());++i) {
+    auto N = PyList_GET_ITEM(gp->children.borrow(),i);
+    if (reinterpret_cast<node::python*>(N)->cxx.get() == this) {
+      Py_INCREF(N);
+      return N;
+    }
+  }
+  return PyErr_Format(PyExc_RuntimeError,"disconnected");
 }
 
 std::shared_ptr<graph> nodebase::my_graph() {
@@ -52,14 +64,16 @@ std::shared_ptr<graph> nodebase::my_graph() {
 }
 
 std::shared_ptr<module> nodebase::my_module() {
-  auto sp = weakparent.lock();
-  while(sp) {
-    sp = sp->weakparent.lock();
+  auto p = this;
+  while(1) {
+    auto next = p->weakparent.lock();
+    if (!next) break;
+    p = next.get();
   }
   // Unless disconnected, we've climbed to the top function graph
-  auto gp = std::dynamic_pointer_cast<graph>(sp);
-  if (!gp) return nullptr;
-  return gp->weakmodule.lock();
+  auto g = dynamic_cast<graph*>(p);
+  if (!g) return nullptr;
+  return g->weakmodule.lock();
 }
 
 PyObject* nodebase::edge_if1(long label) {

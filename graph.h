@@ -44,7 +44,8 @@ class graph : public nodebase, public IF1<graph> {
   virtual std::shared_ptr<module> my_module() {
     auto m = weakmodule.lock();
     if (m) return m;
-    TODO("inner graph");
+    auto pp = weakparent.lock();
+    if (pp) return pp->my_module();
     return nullptr;
   }
 

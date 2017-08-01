@@ -271,6 +271,7 @@ PyObject* module::get_opcodes(PyObject* self,void*) {
   return cxx->opcodes.incref();
 }
 int module::set_opcodes(PyObject* self,PyObject* attr,void*) {
+  TODO("set opcodes");
   return -1;
 }
 

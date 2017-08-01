@@ -102,12 +102,28 @@ PyObject* node::get_if1(PyObject* self,void*) {
     result = PyString_FromFormat("{ Compound %ld %ld \n",label,opcode);
     ssize_t n = PyList_GET_SIZE(cxx->children.borrow());
     PyOwned tail(PyString_FromFormat("} %ld %ld %zd",label,opcode,n));
+
+    // We don't want to duplicate subgraph IF1 if we don't
+    // have to.  So, if we have the same graph more than
+    // once, we'll only output it once, but make multiple
+    // references to it in the tail
+    std::map<PyObject*,ssize_t> known;
     for(ssize_t i=0;i<n;++i) {
-      PyOwned graphno(PyString_FromFormat(" %zd",i));
+      // Have we seen this yet?
+      ssize_t offset = known.size();
+      auto G = PyList_GET_ITEM(cxx->children.borrow(),i);
+      auto it = known.find(G);
+      if (it != known.end()) offset = it->second;
+
+      // Add the offset to the tail
+      PyOwned graphno(PyString_FromFormat(" %zd",offset));
       if (!graphno) return nullptr;
       PyString_Concat(tail.addr(),graphno.borrow());
       if (!tail) return nullptr;
-      auto G = PyList_GET_ITEM(cxx->children.borrow(),i);
+      if (it != known.end()) continue;
+
+      // I don't know this graph yet, so output it
+      known[G] = offset;
       PyOwned gif1(PyObject_GetAttrString(G,"if1"));
       if (!gif1) return nullptr;
       PyString_Concat(result.addr(),gif1.borrow());
@@ -160,10 +176,11 @@ PyObject* node::string(PyObject*) {
   return nodebase::string();
 }
 
-ssize_t node::length(PyObject*) {
-  TODO("length");
-  return -1;
+ssize_t node::length(PyObject* self) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  return cxx->outputs.size();
 }
+
 PyObject* node::item(PyObject* self,ssize_t idx) {
   auto cxx = reinterpret_cast<python*>(self)->cxx;
   auto it = cxx->outputs.find(idx);

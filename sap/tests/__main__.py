@@ -856,15 +856,36 @@ E 0 2 1 2 4''')
             f.addgraph()
         return
 
-if __name__ == '__main__':
-    m = sap.if1.Module()
-    f = m.addfunction("f")
-    f[1] = m.integer
-    t = f.addnode(m.IFIfThenElse)
-    truepart = t.addgraph()
-    falsepart = t.addgraph()
-    print m.if1
+    def test_simple_addgraph(self):
+        m = sap.if1.Module()
+        f = m.addfunction("f")
+        t = f.addnode(m.IFIfThenElse)
+        truepart = t.addgraph()
+        falsepart = t.addgraph()
+        self.assertEqual(t.children,[truepart,falsepart])
+        return
 
+    def test_subgraph_duplicates(self):
+        "You can duplicate a subgraph, but only one comes out"
+        m = sap.if1.Module()
+        f = m.addfunction("f")
+        t = f.addnode(m.IFTagCase)
+        g0 = t.addgraph()
+        g1 = t.addgraph()
+        g0(1) << 3
+        g1(1) << 4
+        t.children.append(g0)
+        t.children.append(g0)
+        t.children.append(g0)
+        self.assertEqual(t.if1,'''{ Compound 1 2 
+G 0
+L     0 1 4 "3"
+G 0
+L     0 1 4 "4"
+} 1 2 5 0 1 0 0 0''')
+        
+
+if __name__ == '__main__':
     if 1:
         import doctest
         doctest.testmod()

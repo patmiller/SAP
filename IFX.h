@@ -100,7 +100,9 @@ public:
    
   static void dealloc(PyObject* pySelf) {
     auto self = reinterpret_cast<python*>(pySelf);
-    ~std::shared_ptr<T>(&self->cxx);
+    auto p = &(self->cxx);
+    p->std::shared_ptr<T>::~shared_ptr<T>();
+    Py_TYPE(pySelf)->tp_free(pySelf);
   }
 
   static PyObject* getattro(PyObject* self,PyObject* attr) {
@@ -140,6 +142,7 @@ public:
     T::Type.tp_flags = T::flags;
     T::Type.tp_base = T::basetype();
     T::Type.tp_new = PyType_GenericNew;
+    T::Type.tp_dealloc = T::dealloc;
     T::Type.tp_init = T::init;
     T::Type.tp_str = T::Type.tp_repr = T::str;
     if (T::methods[0].ml_name) {
