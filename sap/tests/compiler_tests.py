@@ -43,7 +43,7 @@ L     0 1 4 "3"''')
         self.assertEqual(plus1.if1,'''X 11 "plus1"
 E 1 1 0 1 4
 N 1 141
-E 0 1 1 1 4
+E 0 1 1 1 4 %na=x
 L     1 2 4 "1"''')
         return
 

@@ -81,7 +81,7 @@ class Compiler(object):
     def error(self,node,msg):
         f = self.function 
         fname = f.func_name
-        filename = f.func_globals.get('__file__').replace('.pyc','.py')
+        filename = f.func_globals.get('__file__','<unknown>').replace('.pyc','.py')
         raise SemanticError('\n%s:%d:%s: %s'%(
             filename,
             node.lineno,
@@ -110,6 +110,7 @@ class Compiler(object):
             # name
             port = i+1
             f[port] = type
+            f[port].na = arg.id
             self.symtab[arg.id] = f[port]
         
         # Visit the children
