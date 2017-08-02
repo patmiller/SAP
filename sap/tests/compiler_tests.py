@@ -48,3 +48,22 @@ L     1 2 4 "1"''')
         return
 
     
+    def test_assign(self):
+        SAP = Compiler()
+        @SAP(SAP.integer)
+        def f(x):
+            y,z = x*10,20+2
+            return y+z,z
+        self.assertEqual(f.if1,'''X 12 "f"
+E 3 1 0 1 4
+E 2 1 0 2 4 %na=z
+N 1 152
+E 0 1 1 1 4 %na=x
+L     1 2 4 "10"
+N 2 141
+L     2 1 4 "20"
+L     2 2 4 "2"
+N 3 141
+E 1 1 3 1 4 %na=y
+E 2 1 3 2 4 %na=z''')
+        
