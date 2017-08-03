@@ -1,4 +1,5 @@
 from distutils.core import setup, Extension
+
 setup(name='SAP',
       version='0.1',
       description='Single Assignment Python with IF1',
