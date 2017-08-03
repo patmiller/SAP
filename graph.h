@@ -41,7 +41,7 @@ class graph : public nodebase, public IF1<graph> {
     return shared();
   }
 
-  virtual std::shared_ptr<module> my_module() {
+  virtual std::shared_ptr<module> my_module() override {
     auto m = weakmodule.lock();
     if (m) return m;
     auto pp = weakparent.lock();
