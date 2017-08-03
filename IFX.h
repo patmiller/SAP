@@ -101,7 +101,7 @@ class IF1 : public std::enable_shared_from_this<IF1<T>> {
     static void dealloc(PyObject* pySelf) {
       auto self = reinterpret_cast<python*>(pySelf);
       auto p = &(self->cxx);
-      using namespace std;
+      using namespace ::std;
       p->template shared_ptr<T>::~shared_ptr<T>();
       Py_TYPE(pySelf)->tp_free(pySelf);
     }
