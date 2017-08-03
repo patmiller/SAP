@@ -11,6 +11,8 @@ extern PyObject* DEFAULT_OPCODES;
 #include <string>
 #include <memory>
 
+#define DISCONNECTED PyErr_Format(PyExc_RuntimeError,"disconnected")
+
 #define STATIC_STR(name,value)  \
   static PyObject* name = nullptr;			\
   if (!name) name = PyString_FromString(value);

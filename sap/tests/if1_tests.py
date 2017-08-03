@@ -152,11 +152,11 @@ E 0 2 1 2 4''')
         }
         for expected,group in LiteralTests.iteritems():
             for L in group:
-                try: T = (g(1) << L)
+                try: g(1) << L
                 except ValueError as e:
                     if expected != 'error': raise
                 else:
-                    self.assertIs(T,expected)
+                    self.assertIs(g(1).type,expected)
         return
 
     def test_typenames(self):
@@ -885,3 +885,23 @@ L     0 1 4 "4"
 } 1 2 5 0 1 0 0 0''')
         
 
+    def test_multilevel_wire(self):
+        m = sap.if1.Module()
+        f = m.addfunction("f")
+        f[1] = f[2] = m.integer
+        tag = f.addnode(m.IFTagCase)
+        g0 = tag.addgraph()
+        N = g0.addnode(m.IFPlus)
+        v0 = N(1) << 3
+        g1 = tag.addgraph()
+        v1 = tag(1) << f[1]
+
+        path = N(2) << f[2]
+        print
+        print v0
+        print v1
+        print path
+        print
+        print f.if1
+        return
+            

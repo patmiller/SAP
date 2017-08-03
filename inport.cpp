@@ -149,9 +149,8 @@ PyObject* inport::lshift(PyObject* self, PyObject* other) {
     cxx->weakliteral_type.reset();
     cxx->weakport = op;
 
-    auto T = op->weaktype.lock();
-    if (!T) Py_RETURN_NONE;
-    return T->lookup();
+    Py_INCREF(self);
+    return self;
   }
 
   // Something else?
@@ -204,8 +203,9 @@ PyObject* inport::lshift(PyObject* self, PyObject* other) {
   cxx->literal = literal;
   cxx->weakliteral_type = tp;
   cxx->weakport.reset();
-  Py_INCREF(T);
-  return T;
+
+  Py_INCREF(self);
+  return self;
 }
 
 long inport::port() {

@@ -517,9 +517,11 @@ std::string module::lookup(long code) {
   PyObject* value;
   Py_ssize_t pos = 0;
   while (PyDict_Next(opcodes.borrow(), &pos, &key, &value)) {
-    if (PyString_Check(key) && PyInt_Check(value) && PyInt_AsLong(value) == code) {
-      return PyString_AS_STRING(key);
-    }
+    if (!PyString_Check(key)) continue;
+    if (PyString_GET_SIZE(key) < 3) continue;
+    char const* s = PyString_AS_STRING(key);
+    if ( s[0] != 'I' || s[1] != 'F' || s[2] == '_' ) continue;
+    if (PyInt_Check(value) && PyInt_AsLong(value) == code) return s;
   }
   return "";
 }

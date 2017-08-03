@@ -7,6 +7,7 @@
 class type;
 class nodebase;
 class outport;
+class graph;
 
 class inport : public IF1<inport> {
 public:
@@ -37,6 +38,12 @@ public:
 
   static PyObject* richcompare(PyObject*,PyObject*,int);
 
+  static PyObject* cross_graph(std::shared_ptr<inport>,
+			       std::shared_ptr<nodebase>,
+			       std::shared_ptr<graph>,
+			       std::shared_ptr<outport>,
+			       std::shared_ptr<nodebase>,
+			       std::shared_ptr<graph>);
   static PyObject* lshift(PyObject*,PyObject*);
 
   static PyObject* get_dst(PyObject*,void*);
