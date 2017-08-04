@@ -2,30 +2,24 @@ import ast
 import inspect
 
 import sap.if1
-from sap.error import *
-from sap.symbol_table import *
+import sap.compiler_base
 
-class Compiler(CompilerError):
+class Compiler(sap.compiler_base.CompilerBase):
     placeholder = object()
     def __init__(self):
-        self.m = sap.if1.Module()
-        self.symtab = SymbolTable()
-        for type in ('boolean','character','doublereal',
-                'integer','null','real','wild'):
-            setattr(self,type,getattr(self.m,type))
+        sap.compiler_base.CompilerBase.__init__(self)
         return
 
     def __call__(self,*types):
         for t in types:
-            if not isinstance(t,sap.if1.Type):
-                raise TypeError("argss must be types")
+            if not isinstance(t, sap.if1.Type):
+                raise TypeError('argss must be types')
         def compile_function(f):
-            return self.compile(f,types)
+            return self.compile(f, types)
         return compile_function
 
     def compile(self,f,types):
-        self.function = f
-        self.filename = f.func_code.co_filename
+        self.set_base_attr(f)
         baseline = f.func_code.co_firstlineno
         self.graphs = []
         src = inspect.getsource(f)
@@ -40,15 +34,6 @@ class Compiler(CompilerError):
         ast.fix_missing_locations(body)
         return self.visit(body,f,types)
 
-    def visit(self,node,*args):
-        mname = type(node).__name__
-        method = getattr(self,mname,self.default)
-        return method(node,*args)
-
-    def default(self,node):
-        self.semantic_error(node,'not implemented %s'%type(node).__name__)
-        return
-
     def FunctionDef(self,node,f,types):
         self.symtab.push()
 
@@ -60,17 +45,17 @@ class Compiler(CompilerError):
 
         # If well formed, the last statement is a Return
         if (node.body is None) or not isinstance(node.body[-1], ast.Return):
-            self.not_supported_error(node, 'This function is not well formed')
+            self.error.not_supported_error(node, 'This function is not well formed')
         if node.args.vararg is not None:
-            self.not_supported_error(node, 'SAP functions cannot have varargs')
+            self.error.not_supported_error(node, 'SAP functions cannot have varargs')
         if node.args.kwarg is not None:
-            self.not_supported_error(node, 'SAP functions cannot have kwargs')
+            self.error.not_supported_error(node, 'SAP functions cannot have kwargs')
         if len(node.args.defaults) != 0:
-            self.not_supported_error(node, 'SAP functions cannot have defaults')
+            self.error.not_supported_error(node, 'SAP functions cannot have defaults')
 
         # Load the first level of the symbol table
         if len(types) != len(node.args.args):
-            self.arity_error(node, len(node.args.args), len(types))
+            self.error.arity_error(node, len(node.args.args), len(types))
 
         for i,(arg,type) in enumerate(zip(node.args.args,types)):
             # Assign the type to the port and save the
@@ -96,7 +81,7 @@ class Compiler(CompilerError):
         # Other things are legal python, but are not supported
         # right now
         if len(node.targets) != 1:
-            self.arity_error(node, len(node.targets), 1)
+            self.error.arity_error(node, len(node.targets), 1)
         lhs = []
         target = node.targets[0]
         if isinstance(target,ast.Name):
@@ -104,19 +89,19 @@ class Compiler(CompilerError):
         elif isinstance(target,ast.Tuple):
             targets = target.elts
         else:
-            self.semantic_error(node,'invalid lhs')
+            self.error.semantic_error(node,'invalid lhs')
         for target in targets:
             if not isinstance(target, ast.Name):
-                self.symbol_name_error(target)
+                self.error.symbol_name_error(target)
             name = target.id
             if self.symtab.top(name) is not None:
-                self.single_assignment_error(target)
-            self.symtab[name] = self.placeholder
+                self.error.single_assignment_error(target)
+            self.symtab[name] = Compiler.placeholder
             lhs.append(name)
 
         rhs = self.visit(node.value)
         if len(lhs) != len(rhs):
-            self.assignment_arity_error(node, lhs, rhs)
+            self.error.assignment_arity_error(node, lhs, rhs)
         # Replace the placeholder with the real value
         for sym,val in zip(lhs,rhs):
             self.symtab[sym] = val
@@ -140,9 +125,9 @@ class Compiler(CompilerError):
         if isinstance(node.ctx,ast.Load):
             val = self.symtab[node.id]
             if val is None:
-                self.symbol_lookup_error(node)
-            if val is self.placeholder:
-                self.placeholder_error(node)
+                self.error.symbol_lookup_error(node)
+            if val is Compiler.placeholder:
+                self.error.placeholder_error(node)
             return (val,)
         raise NotImplementedError,node.ctx
 
@@ -173,16 +158,16 @@ class Compiler(CompilerError):
         a = self.visit(node.left)
         b = self.visit(node.right)
         if len(a) != 1:
-            self.arity_error(node, len(a), 1)
+            self.error.arity_error(node, len(a), 1)
         if len(b) != 1:
-            self.arity_error(node, len(b), 1)
+            self.error.arity_error(node, len(b), 1)
 
         # Get a node and wire in the inputs
         N = self.visit(node.op)
         N(1) << a[0]
         N(2) << b[0]
         if N(1).type is not N(2).type:
-            self.type_error(node)
+            self.error.type_error(node)
 
         # Set the output edge (which is the output value)
         N[1] = N(1).type
@@ -203,7 +188,7 @@ class Compiler(CompilerError):
 
         a = self.visit(node.operand)
         if len(a) != 1:
-            self.arity_error(node, len(a), 1)
+            self.error.arity_error(node, len(a), 1)
 
         N = self.visit(node.op)
         if N is not None:
@@ -253,18 +238,18 @@ class Compiler(CompilerError):
     def BoolOp(self, node):
         # assuming that boolop is basically a binop and thus only has 2 args
         if len(node.values) != 2:
-            self.arity_error(node, len(node.values), 2)
+            self.error.arity_error(node, len(node.values), 2)
 
         a = self.visit(node.values[0])
         b = self.visit(node.values[1])
         if len(a) != 1:
-            self.arity_error(node.values[0], len(a), 1)
+            self.error.arity_error(node.values[0], len(a), 1)
         if a[0].type is not self.boolean:
-            self.semantic_error(node.values[0], 'type must be a boolean')
+            self.error.semantic_error(node.values[0], 'type must be a boolean')
         if len(b) != 1:
-            self.arity_error(node.values[1], len(b), 1)
+            self.error.arity_error(node.values[1], len(b), 1)
         if b[0].type is not self.boolean:
-            self.semantic_error(node.values[1], 'type must be a boolean')
+            self.error.semantic_error(node.values[1], 'type must be a boolean')
 
         N = self.visit(node.op)
         N(1) << a[0]
@@ -277,30 +262,26 @@ class Compiler(CompilerError):
     def Compare(self, node):
         # assume that comparators has only 1 element
         if len(node.comparators) != 1:
-            self.arity_error(node, len(node.comparators), 1)
+            self.error.arity_error(node, len(node.comparators), 1)
 
         a = self.visit(node.left)
         b = self.visit(node.comparators[0])
         if len(a) != 1:
-            self.arity_error(node.left, len(a), 1)
+            self.error.arity_error(node.left, len(a), 1)
         if len(b) != 1:
-            self.arity_error(node.comparators[0], len(b), 1)
+            self.error.arity_error(node.comparators[0], len(b), 1)
 
         # assume that ops has only 1 element
         if len(node.ops) != 1:
-            self.arity_error(node, len(node.ops), 1)
+            self.error.arity_error(node, len(node.ops), 1)
 
         N = self.visit(node.ops[0])
         N(1) << a[0]
         N(2) << b[0]
 
         if N(1).type is not N(2).type:
-            self.type_error(node)
+            self.error.type_error(node)
 
         N[1].type = self.boolean
 
         return (N[1],)
-
-# This makes a basic compiler.  We can have multiple compilers
-# if we choose
-SAP = Compiler()

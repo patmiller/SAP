@@ -1,5 +1,7 @@
 import ast
 
+import sap.compiler_base
+
 class BaseError(Exception):
     def __init__(self, *args):
         raise NotImplementedError('BaseError cannot be initialized - use SemanticError instead')
@@ -25,7 +27,10 @@ class BaseError(Exception):
         prefix = '%s: ' % fname
         suffix = ''
         if lineno is not None:
-            prefix = '\n%s:%d:%s: ' % (compiler.filename,lineno,fname)
+            try:
+                prefix = '\n%s:%d:%s: ' % (compiler.filename,lineno,fname)
+            except:
+                prefix = '%s: ' % fname
             try:
                 suffix = '\n'+[x for x in open(compiler.filename)][lineno-1] + (' ' * col_offset + '^')
             except:
@@ -102,32 +107,37 @@ class SAPTypeError(SemanticError):
 
 class CompilerError(object):
     """A class which contains methods for Compiler error calls"""
+    def __init__(self, compiler):
+        assert isinstance(compiler, sap.compiler_base.CompilerBase), 'Compiler passed in to CompilerError is not valid'
+        self.compiler = compiler
+        return
+
     def semantic_error(self, node, msg):
-        raise SemanticError(self, node, msg)
+        raise SemanticError(self.compiler, node, msg)
 
     def arity_error(self, node, actual, expected):
-        raise ArityError(self, node, actual, expected)
+        raise ArityError(self.compiler, node, actual, expected)
 
     def assignment_arity_error(self, node, lhs, rhs):
-        raise AssignmentArityError(self, node, lhs, rhs)
+        raise AssignmentArityError(self.compiler, node, lhs, rhs)
 
     def not_supported_error(self, node):
-        raise NotSupportedError(self, node)
+        raise NotSupportedError(self.compiler, node)
 
     def symbol_table_error(self, node):
-        raise SymbolTableError(self, node)
+        raise SymbolTableError(self.compiler, node)
 
     def single_assignment_error(self, node):
-        raise SingleAssignmentError(self, node)
+        raise SingleAssignmentError(self.compiler, node)
 
     def symbol_lookup_error(self, node):
-        raise SymbolLookupError(self, node)
+        raise SymbolLookupError(self.compiler, node)
 
     def placeholder_error(self, node):
-        raise PlaceholderError(self, node)
+        raise PlaceholderError(self.compiler, node)
 
     def symbol_name_error(self, node):
-        raise SymbolNameError(self, node)
+        raise SymbolNameError(self.compiler, node)
 
     def type_error(self, node):
-        raise SAPTypeError(self, node)
+        raise SAPTypeError(self.compiler, node)
