@@ -98,6 +98,35 @@ PyObject* inport::get_pragmas(PyObject* self,void*) {
   return cxx->pragmas.incref();
 }
 
+PyObject* inport::cross_graph(std::shared_ptr<inport> in,
+			      std::shared_ptr<nodebase> src,
+			      std::shared_ptr<graph> src_g,
+			      std::shared_ptr<outport> out,
+			      std::shared_ptr<nodebase> dst,
+			      std::shared_ptr<graph> dst_g) {
+  // See if we can "climb" up from the dst to the src_g
+  std::vector<nodebase*> path;
+  for(nodebase* p=src_g.get(); p; ) {
+    auto parent = p->weakparent.lock();
+    if (!parent) break;
+    p = parent.get();
+    path.push_back(p);
+    if (p == dst_g.get()) break; // Done?
+  }
+  if (path.size() == 0 || path.back() != dst_g.get()) {
+    return PyErr_Format(PyExc_RuntimeError,"invalid path");
+  }
+
+  // we need to go from the out port to the compound (creating an inport)
+  auto last = in;
+  for(auto it=path.rbegin(); it != path.rend(); ++it) {
+    printf("From %ld@%ld -> %ld\n",last->port(),last->my_node()->opcode,(*it)->opcode);
+  }
+
+  return TODO("cross");
+}
+
+
 PyObject* inport::lshift(PyObject* self, PyObject* other) {
   auto cxx = reinterpret_cast<python*>(self)->cxx;
   literal_parser_state_t flavor = ERROR;
@@ -144,10 +173,26 @@ PyObject* inport::lshift(PyObject* self, PyObject* other) {
 
   // An out port?
   else if ( PyObject_TypeCheck(other,&outport::Type) ) {
-    auto op = reinterpret_cast<outport::python*>(other)->cxx;
+    auto out = reinterpret_cast<outport::python*>(other)->cxx;
+    auto src = out->weaknode.lock();
+    if (!src) return DISCONNECTED;
+
+    auto dst = cxx->weaknode.lock();
+    if (!dst) return DISCONNECTED;
+    
+    // We can only wire within the same graph.  If the
+    // source lives in another graph, we have to wire
+    // our way down to the compound.
+    auto src_graph = src->my_graph();
+    auto dst_graph = dst->my_graph();
+    if (src_graph.get() != dst_graph.get()) {
+      return cross_graph(cxx,dst,dst_graph,
+			 out,src,src_graph);
+    }
+    
     cxx->literal.clear();
     cxx->weakliteral_type.reset();
-    cxx->weakport = op;
+    cxx->weakport = out;
 
     Py_INCREF(self);
     return self;
