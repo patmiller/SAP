@@ -98,32 +98,86 @@ PyObject* inport::get_pragmas(PyObject* self,void*) {
   return cxx->pragmas.incref();
 }
 
-PyObject* inport::cross_graph(std::shared_ptr<inport> in,
+PyObject* inport::cross_graph(std::shared_ptr<outport> out,
 			      std::shared_ptr<nodebase> src,
 			      std::shared_ptr<graph> src_g,
-			      std::shared_ptr<outport> out,
+			      std::shared_ptr<inport> in,
 			      std::shared_ptr<nodebase> dst,
 			      std::shared_ptr<graph> dst_g) {
+  auto wire = out;
+  
   // See if we can "climb" up from the dst to the src_g
-  std::vector<nodebase*> path;
-  for(nodebase* p=src_g.get(); p; ) {
-    auto parent = p->weakparent.lock();
-    if (!parent) break;
-    p = parent.get();
+  std::vector<std::shared_ptr<nodebase>> path;
+  bool good = false;
+  for(std::shared_ptr<nodebase> p=dst_g;p;p=p->weakparent.lock()) {
+    if (p.get() == src_g.get()) { good = true; break; }
     path.push_back(p);
-    if (p == dst_g.get()) break; // Done?
   }
-  if (path.size() == 0 || path.back() != dst_g.get()) {
-    return PyErr_Format(PyExc_RuntimeError,"invalid path");
+  if (!good || path.size()%2) return DISCONNECTED;
+
+  // At this point, the path should look like:
+  // { G,C,  G,C,   G,C... G,C }
+  // where each G is an inner graph and each C is a compound
+  // node along the path from the source to the destination
+  // So, we simply have find a free port for each compound,
+  // mirror it to each of its subgraphs, and create the
+  // wire
+  PyOwned portpath(PyTuple_New(path.size()+1));
+  ssize_t nport = 0;
+  for(auto it=path.rbegin(); it != path.rend(); it += 2) {
+    auto C = *it;
+    auto G = *(it+1);
+
+    // Find the first free port in the compound (and children)
+    long lastport = 0;
+    auto last = C->inputs.rbegin();
+    if (last != C->inputs.rend()) {
+      auto mx = last->first;
+      if (mx > lastport) lastport = mx;
+    }
+    std::vector<std::shared_ptr<graph>> subgraphs;
+    for(ssize_t i=0;i<PyList_GET_SIZE(C->children.borrow());++i) {
+      auto p = PyList_GET_ITEM(C->children.borrow(),i);
+      if (!PyObject_TypeCheck(p,&graph::Type)) continue;
+      auto subg = reinterpret_cast<graph::python*>(p)->cxx;
+      subgraphs.push_back(subg);
+      auto last = subg->outputs.rbegin();
+      if (last != subg->outputs.rend()) {
+	auto mx = last->first;
+	if (mx > lastport) lastport = mx;
+      }
+    }
+
+    // The next available port
+    long freeport = lastport+1;
+
+    // Create an inport on the compound there and
+    // forward the last outport here
+    auto port = C->inputs[freeport] = std::make_shared<inport>(C);
+    PyTuple_SET_ITEM(portpath.borrow(),nport++,port->package());
+    port->literal.clear();
+    port->weakliteral_type.reset();
+    port->weakport = wire;
+
+    // Create outports with the correct type at ALL subgraphs
+    // The wire will continue from only one of these graphs
+    for(auto sg:subgraphs) {
+      auto oport = sg->outputs[freeport] = std::make_shared<outport>(sg);
+      oport->weaktype = wire->weaktype;
+      if (sg == G) {
+	wire = oport;
+	PyTuple_SET_ITEM(portpath.borrow(),nport++,oport->package());
+      }
+    }
+    
   }
 
-  // we need to go from the out port to the compound (creating an inport)
-  auto last = in;
-  for(auto it=path.rbegin(); it != path.rend(); ++it) {
-    printf("From %ld@%ld -> %ld\n",last->port(),last->my_node()->opcode,(*it)->opcode);
-  }
-
-  return TODO("cross");
+  // now make the final wire connection to the destination
+  in->literal.clear();
+  in->weakliteral_type.reset();
+  in->weakport = wire;
+  PyTuple_SET_ITEM(portpath.borrow(),nport++,in->package());
+  return portpath.incref();
 }
 
 
@@ -186,8 +240,8 @@ PyObject* inport::lshift(PyObject* self, PyObject* other) {
     auto src_graph = src->my_graph();
     auto dst_graph = dst->my_graph();
     if (src_graph.get() != dst_graph.get()) {
-      return cross_graph(cxx,dst,dst_graph,
-			 out,src,src_graph);
+      return cross_graph(out,src,src_graph,
+			 cxx,dst,dst_graph);
     }
     
     cxx->literal.clear();
