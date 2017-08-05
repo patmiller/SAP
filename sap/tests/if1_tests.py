@@ -891,17 +891,27 @@ L     0 1 4 "4"
         f[1] = f[2] = m.integer
         tag = f.addnode(m.IFTagCase)
         g0 = tag.addgraph()
+
         N = g0.addnode(m.IFPlus)
         v0 = N(1) << 3
+        self.assertEqual(v0,N(1))
+
         g1 = tag.addgraph()
         v1 = tag(1) << f[1]
+        self.assertEqual(v1,tag(1))
 
         path = N(2) << f[2]
-        print
-        print v0
-        print v1
-        print path
-        print
-        print f.if1
+        self.assertEqual(path,(tag(2),g0[2],N(2)))
+
+        self.assertEqual(f.if1,'''X 0 "f"
+{ Compound 1 2 
+G 0
+N 1 141
+L     1 1 4 "3"
+E 0 2 1 2 4
+G 0
+} 1 2 2 0 1
+E 0 1 1 1 4
+E 0 2 1 2 4''')
         return
             
