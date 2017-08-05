@@ -534,7 +534,7 @@ PyObject* module::item(PyObject* self,ssize_t opcode) {
   auto cxx = reinterpret_cast<python*>(self)->cxx;
   auto name = cxx->lookup(opcode);
   if (name.size() == 0) {
-    return PyErr_Format(PyExc_IndexError,"No such opcode %xd",opcode);
+    return PyErr_Format(PyExc_IndexError,"No such opcode %xd",(unsigned int)opcode);
   }
   return PyString_FromString(name.c_str());
 }

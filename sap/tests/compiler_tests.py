@@ -1,6 +1,7 @@
 import unittest
 
-from sap.compiler import Compiler,SemanticError
+from sap.compiler import Compiler
+from sap.error import *
 
 class TestCompiler(unittest.TestCase):
     def test_error(self):
@@ -9,7 +10,7 @@ class TestCompiler(unittest.TestCase):
             @SAP()
             def three():
                 return x
-        self.assertIn('missing name x',e.exception.message)
+        self.assertIn('Name x not found in symbol table',e.exception.message)
         return
 
 
@@ -66,4 +67,4 @@ L     2 2 4 "2"
 N 3 141
 E 1 1 3 1 4 %na=y
 E 2 1 3 2 4 %na=z''')
-        
+        return
