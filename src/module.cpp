@@ -1,6 +1,8 @@
 #include "module.h"
 #include "type.h"
 #include "graph.h"
+#include "inport.h"
+#include "outport.h"
 
 PyTypeObject module::Type;
 
@@ -10,7 +12,133 @@ void module::setup() {
   as_sequence.sq_item = item;
 }
 
+PyObject* module::literal_to_python(std::shared_ptr<inport> const &p) {
+  auto T = p->weakliteral_type.lock();
+  if (!T) return DISCONNECTED;
+  switch(T->code) {
+  case IF_Array: {
+    // Check subtype as char
+    return TODO("string literal");
+  }
+  case IF_Basic: {
+    switch(T->aux) {
+    case IF_Boolean: return TODO("Boolean");
+    case IF_Character: return TODO("Character");
+    case IF_DoubleReal: return TODO("DoubleReal");
+    case IF_Integer: {
+      auto v = ::atol(p->literal.c_str());
+      return PyInt_FromLong(v);
+    }
+    case IF_Null: return TODO("Null");
+    case IF_Real: {
+      auto v = ::atof(p->literal.c_str());
+      return PyFloat_FromDouble(v);
+    }
+    case IF_WildBasic: return TODO("WildBasic");
+    default: return TODO("unknown basic");
+    }
+  }
+  default: ;
+  }
+    
+  return PyErr_Format(PyExc_TypeError,"Invalid literal type");
+}
+
+PyObject* module::interpret_node(PyObject* self, PyObject* interpreter, PyObject* node, PyObject* args) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  auto N = reinterpret_cast<node::python*>(node)->cxx;
+  std::string opname = cxx->lookup(N->opcode);
+
+  // We will fill the frame from the extra values
+  // in args.  It starts at pos 2 and moves to the
+  // size
+  ssize_t argpos = 2;
+  ssize_t lastpos = PyTuple_GET_SIZE(args);
+
+  // Make a frame for the edges in the node and set the offsets in the edges
+  ssize_t framesize = N->inputs.size() + N->outputs.size();
+  PyOwned frame(PyList_New(framesize));
+  if (!frame) return nullptr;
+  ssize_t i = 0;
+  for(auto x:N->inputs) {
+    x.second->foffset = i;
+    if (x.second->literal.size()) {
+      PyList_SET_ITEM(frame.borrow(),i++,cxx->literal_to_python(x.second));
+      if (PyErr_Occurred()) return nullptr;
+    } else if (argpos == lastpos) {
+      return PyErr_Format(PyExc_TypeError,"not all inputs were set");
+    } else {
+      PyObject* P = PyTuple_GET_ITEM(args,argpos++);
+      Py_INCREF(P);
+      PyList_SET_ITEM(frame.borrow(),i++,P);
+    }
+  }
+  if (argpos != lastpos) {
+    return PyErr_Format(PyExc_TypeError,"not all inputs were used");
+  }
+  for(auto x:N->outputs) {
+    x.second->foffset = i;
+    Py_INCREF(Py_None);
+    PyList_SET_ITEM(frame.borrow(),i++,Py_None);
+  }
+
+  // Call the interpreter to fill in the frame
+  PyOwned nothing(PyObject_CallMethod(interpreter,(char*)opname.c_str(),(char*)"OO",node,frame.borrow()));
+  if (!nothing) return nullptr;
+
+  // If we have one value, return it.  Otherwise make a tuple
+  switch(N->outputs.size()) {
+  case 0:
+    Py_RETURN_NONE;
+  case 1: {
+    auto it = N->outputs.begin();
+    auto result = PyList_GET_ITEM(frame.borrow(),it->second->foffset);
+    if (result == Py_None) {
+      return PyErr_Format(PyExc_ValueError,"port %ld was not computed",it->first);
+    }
+    Py_INCREF(result);
+    return result;
+  }
+  default:;
+  }
+
+  PyOwned result(PyTuple_New(N->outputs.size()));
+  ssize_t j = 0;
+  if (!result) return nullptr;
+  for(auto x:N->outputs) {
+    printf("Do port %ld fo=%zd\n",x.first,x.second->foffset);
+    auto v = PyList_GET_ITEM(frame.borrow(),x.second->foffset);
+    if (v == Py_None) {
+      return PyErr_Format(PyExc_ValueError,"port %ld was not computed",x.first);
+    }
+    Py_INCREF(v);
+    PyTuple_SET_ITEM(result.borrow(),j++,v);
+  }
+  return result.incref();
+}
+
+PyObject* module::interpret_graph(PyObject* self, PyObject* interpreter, PyObject* node, PyObject* args) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  return TODO("interpret a graph");
+}
+
+PyObject* module::interpret(PyObject* self,PyObject* args) {
+  if (PyTuple_GET_SIZE(args) < 2) {
+    return PyErr_Format(PyExc_TypeError,"interpret() takes 2 or more arguments");
+  }
+
+  PyObject* interpreter = PyTuple_GET_ITEM(args,0);
+  PyObject* node = PyTuple_GET_ITEM(args,1);
+  if (PyObject_TypeCheck(node,&graph::Type)) {
+    return interpret_graph(self,interpreter,node,args);
+  } else if (PyObject_TypeCheck(node,&node::Type)) {
+    return interpret_node(self,interpreter,node,args);
+  }
+  return PyErr_Format(PyExc_ValueError,"2nd arg must be a node or graph");
+}
+
 PyMethodDef module::methods[] = {
+  {(char*)"interpret",module::interpret,METH_VARARGS,"interpret a node or function using an interpreter object"},
   {(char*)"addtype",(PyCFunction)module::addtype,METH_VARARGS|METH_KEYWORDS,"add a type"},
     {(char*)"addtypechain",(PyCFunction)module::addtypechain,METH_VARARGS|METH_KEYWORDS,"create a type chain (tuple, tags, fields)"},
   {(char*)"addfunction",module::addfunction,METH_VARARGS,"add a new function"},

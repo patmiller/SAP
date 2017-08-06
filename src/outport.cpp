@@ -29,6 +29,7 @@ PyGetSetDef outport::getset[] = {
   {(char*)"type",outport::get_type,nullptr,(char*)"TBD type",nullptr},
   {(char*)"edges",outport::get_edges,nullptr,(char*)"TBD edges",nullptr},
   {(char*)"pragmas",outport::get_pragmas,nullptr,(char*)"TBD pragmas",nullptr},
+    {(char*)"foffset",outport::get_foffset,nullptr,(char*)"TBD foffset",nullptr},
   {nullptr}
 };
 
@@ -39,6 +40,11 @@ PyObject* outport::get_node(PyObject* self,void*) {
     return PyErr_Format(PyExc_RuntimeError,"disconnected type");
   }
   return np->lookup();
+}
+
+PyObject* outport::get_foffset(PyObject* self,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  return PyInt_FromLong(cxx->foffset);
 }
 
 PyObject* outport::get_port(PyObject* self,void*) {

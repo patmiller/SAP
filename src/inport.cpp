@@ -30,6 +30,7 @@ PyGetSetDef inport::getset[] = {
   {(char*)"src",inport::get_src,nullptr,(char*)"TBD src",nullptr},
   {(char*)"oport",inport::get_oport,nullptr,(char*)"TBD oport",nullptr},
   {(char*)"pragmas",inport::get_pragmas,nullptr,(char*)"TBD pragmas",nullptr},
+  {(char*)"foffset",inport::get_foffset,nullptr,(char*)"TBD foffset"},
   {nullptr}
 };
 
@@ -88,11 +89,18 @@ PyObject* inport::get_type(PyObject* self,void*) {
 }
 
 PyObject* inport::get_src(PyObject* self,void*) {
-  Py_RETURN_NONE;
+  return TODO("src");
 }
+
 PyObject* inport::get_oport(PyObject* self,void*) {
-  Py_RETURN_NONE;
+  return TODO("oport");
 }
+
+PyObject* inport::get_foffset(PyObject* self,void*) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  return PyInt_FromLong(cxx->foffset);
+}
+
 PyObject* inport::get_pragmas(PyObject* self,void*) {
   auto cxx = reinterpret_cast<python*>(self)->cxx;
   return cxx->pragmas.incref();

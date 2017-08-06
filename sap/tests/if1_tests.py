@@ -914,4 +914,23 @@ G 0
 E 0 1 1 1 4
 E 0 2 1 2 4''')
         return
+
+    def test_interpret_node(self):
+        class I(object):
+            def IFPlus(self,n,frame):
+                v = frame[n(1).foffset]+frame[n(2).foffset]
+                frame[n[1].foffset] = v
+                return
+
+        m = sap.if1.Module()
+        f = m.addfunction("f")
+        f[1] = f[2] = m.integer
+        N = f.addnode(m.IFPlus)
+        N(1) << f[1]
+        N(2) << f[2]
+        N[1] = m.integer
+        f(1) << N[1]
+        v = m.interpret(I(),N,3,4)
+        self.assertEqual(v,7)
+        return
             

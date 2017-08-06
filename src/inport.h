@@ -12,6 +12,7 @@ class graph;
 class inport : public IF1<inport> {
 public:
   std::weak_ptr<nodebase> weaknode;
+  ssize_t foffset;
 
   // For a literal edge
   std::string literal;
@@ -53,6 +54,7 @@ public:
   static PyObject* get_pragmas(PyObject*,void*);
   static PyObject* get_src(PyObject*,void*);
   static PyObject* get_oport(PyObject*,void*);
+  static PyObject* get_foffset(PyObject*,void*);
 
   std::shared_ptr<nodebase> my_node();
 

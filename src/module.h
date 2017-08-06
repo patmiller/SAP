@@ -5,6 +5,7 @@
 #include "IFX.h"
 
 class type;
+class inport;
 class module : public IF1<module> {
  public:
   PyOwned types;
@@ -25,6 +26,10 @@ class module : public IF1<module> {
 
   static void setup();
 
+  PyObject* literal_to_python(std::shared_ptr<inport> const &p);
+  static PyObject* interpret_node(PyObject*,PyObject*,PyObject*,PyObject*);
+  static PyObject* interpret_graph(PyObject*,PyObject*,PyObject*,PyObject*);
+  static PyObject* interpret(PyObject*,PyObject*);
   static PyObject* addtype(PyObject*,PyObject*,PyObject*);
   static PyObject* addtypechain(PyObject*,PyObject*,PyObject*);
   static PyObject* addfunction(PyObject*,PyObject*);

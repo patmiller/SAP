@@ -11,6 +11,7 @@ class outport : public IF1<outport> {
   std::weak_ptr<nodebase> weaknode;
   std::weak_ptr<type> weaktype;
   PyOwned pragmas;
+  ssize_t foffset;
 
   static PyTypeObject Type;
   static char const* doc;
@@ -27,6 +28,7 @@ class outport : public IF1<outport> {
   static PyObject* get_type(PyObject*,void*);
   static PyObject* get_pragmas(PyObject*,void*);
   static PyObject* get_edges(PyObject*,void*);
+  static PyObject* get_foffset(PyObject*,void*);
 
   static PyObject* richcompare(PyObject*,PyObject*,int);
 
