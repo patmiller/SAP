@@ -1,10 +1,6 @@
 # TODO List
 
 ## Language Updates
-- Make sap.tests.test\_utilities module to help with tests
-  - integrate into error\_tests.py
-- Build SymbolTable to always have len at least 1
-- Test API for symbol\_table.py
 - Build up all types of expressions - Different class maybe??
 - Test expressions
 - Build compiler.py
@@ -21,5 +17,9 @@
 - while loops
 - for loops
 - type casting
+  - automatic type casting on simple ops
 - external functions
   - sin, cos, tan, etc.
+
+## Cleanup
+- Move sap/tests to top level directory

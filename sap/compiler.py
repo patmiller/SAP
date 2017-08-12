@@ -1,40 +1,38 @@
 import ast
-import inspect
 
+import sap.util
 import sap.if1
 import sap.compiler_base
 
+
 class Compiler(sap.compiler_base.CompilerBase):
-    placeholder = object()
     def __init__(self):
         sap.compiler_base.CompilerBase.__init__(self)
         return
 
-    def __call__(self,*types):
+    def __call__(self, *types):
         for t in types:
             if not isinstance(t, sap.if1.Type):
                 raise TypeError('argss must be types')
+
         def compile_function(f):
             return self.compile(f, types)
         return compile_function
 
-    def compile(self,f,types):
+    def compile(self, f, types):
         self.set_base_attr(f)
         baseline = f.func_code.co_firstlineno
         self.graphs = []
-        src = inspect.getsource(f)
+        src = sap.util.get_func_code(f)
 
-        if src[0].isspace():
-            body = ast.parse('if 0:\n'+src).body[0].body[0]
-        else:
-            body = ast.parse(src).body[0]
+        body = ast.parse(src).body[0]
 
         self.func_def = body
-        ast.increment_lineno(body,baseline-body.lineno)
+        ast.increment_lineno(body, baseline - body.lineno)
         ast.fix_missing_locations(body)
-        return self.visit(body,f,types)
+        return self.visit(body, f, types)
 
-    def FunctionDef(self,node,f,types):
+    def FunctionDef(self, node, f, types):
         self.symtab.push()
 
         # Create my top level function (and push on
@@ -45,22 +43,26 @@ class Compiler(sap.compiler_base.CompilerBase):
 
         # If well formed, the last statement is a Return
         if (node.body is None) or not isinstance(node.body[-1], ast.Return):
-            self.error.not_supported_error(node, 'This function is not well formed')
+            self.error.not_supported_error(
+                node, 'This function is not well formed')
         if node.args.vararg is not None:
-            self.error.not_supported_error(node, 'SAP functions cannot have varargs')
+            self.error.not_supported_error(
+                node, 'SAP functions cannot have varargs')
         if node.args.kwarg is not None:
-            self.error.not_supported_error(node, 'SAP functions cannot have kwargs')
+            self.error.not_supported_error(
+                node, 'SAP functions cannot have kwargs')
         if len(node.args.defaults) != 0:
-            self.error.not_supported_error(node, 'SAP functions cannot have defaults')
+            self.error.not_supported_error(
+                node, 'SAP functions cannot have defaults')
 
         # Load the first level of the symbol table
         if len(types) != len(node.args.args):
             self.error.arity_error(node, len(node.args.args), len(types))
 
-        for i,(arg,type) in enumerate(zip(node.args.args,types)):
+        for i, (arg, type) in enumerate(zip(node.args.args, types)):
             # Assign the type to the port and save the
             # name
-            port = i+1
+            port = i + 1
             f[port] = type
             f[port].na = arg.id
             self.symtab[arg.id] = f[port]
@@ -72,11 +74,21 @@ class Compiler(sap.compiler_base.CompilerBase):
         # Visit the expression side of the return
         ret = node.body[-1]
         values = self.visit(ret.value)
-        for i,v in enumerate(values):
-            f(i+1) << v
+        for i, v in enumerate(values):
+            f(i + 1) << v
+
+        # Add function to top level of symbol table
+        self.symtab.pop()
+        fval = ([], [])
+        for i in range(len(types)):
+            fval[0].append(f[i + 1])
+        for i in range(len(values)):
+            fval[1].append(f(i + 1))
+        self.symtab[f] = (tuple(fval[0]), tuple(fval[1]))
+
         return f
 
-    def Assign(self,node):
+    def Assign(self, node):
         # The lhs is either a single Name or a Tuple of Name
         # Other things are legal python, but are not supported
         # right now
@@ -84,64 +96,66 @@ class Compiler(sap.compiler_base.CompilerBase):
             self.error.arity_error(node, len(node.targets), 1)
         lhs = []
         target = node.targets[0]
-        if isinstance(target,ast.Name):
+        if isinstance(target, ast.Name):
             targets = node.targets
-        elif isinstance(target,ast.Tuple):
+        elif isinstance(target, ast.Tuple):
             targets = target.elts
         else:
-            self.error.semantic_error(node,'invalid lhs')
+            self.error.semantic_error(node, 'invalid lhs')
         for target in targets:
             if not isinstance(target, ast.Name):
                 self.error.symbol_name_error(target)
             name = target.id
             if self.symtab.top(name) is not None:
                 self.error.single_assignment_error(target)
-            self.symtab[name] = Compiler.placeholder
+            self.symtab[name] = sap.compiler_base.CompilerBase.placeholder
             lhs.append(name)
 
         rhs = self.visit(node.value)
         if len(lhs) != len(rhs):
             self.error.assignment_arity_error(node, lhs, rhs)
         # Replace the placeholder with the real value
-        for sym,val in zip(lhs,rhs):
+        for sym, val in zip(lhs, rhs):
             self.symtab[sym] = val
             # Set the %na pragma (if possible)
-            try: setattr(val,'na',sym)
-            except AttributeError: pass
+            try:
+                setattr(val, 'na', sym)
+            except AttributeError:
+                pass
         return lhs
 
-    def Num(self,node):
+    def Num(self, node):
         "Num just returns the literal value"
         # This is done as a tuple because, in general,
         # an expression can return an arbitrary number
         # of values
         return (node.n,)
 
-    def NameConstant(self,node):
+    def NameConstant(self, node):
         return (node.value,)
 
-    def Name(self,node):
+    def Name(self, node):
         # ctx is Param(), Load() [rhs], or Store() [lhs]
-        if isinstance(node.ctx,ast.Load):
+        if isinstance(node.ctx, ast.Load):
             val = self.symtab[node.id]
             if val is None:
                 self.error.symbol_lookup_error(node)
-            if val is Compiler.placeholder:
+            if val is sap.compiler_base.CompilerBase.placeholder:
                 self.error.placeholder_error(node)
             return (val,)
-        raise NotImplementedError,node.ctx
+        raise NotImplementedError(node.ctx)
 
-    def Tuple(self,node):
+    def Tuple(self, node):
         # catenate all the tuples for the rhs into one
-        return sum((self.visit(x) for x in node.elts),())
+        return sum((self.visit(x) for x in node.elts), ())
 
-    def Add(self,node):
+    def Add(self, node):
         return self.graphs[-1].addnode(self.m.IFPlus)
 
     def Sub(self, node):
         return self.graphs[-1].addnode(self.m.IFMinus)
 
-    def Mult(self,node):
+    def Mult(self, node):
         return self.graphs[-1].addnode(self.m.IFTimes)
 
     def Div(self, node):
@@ -150,7 +164,7 @@ class Compiler(sap.compiler_base.CompilerBase):
     def Mod(self, node):
         return self.graphs[-1].addnode(self.m.IFMod)
 
-    def BinOp(self,node):
+    def BinOp(self, node):
         "The op is just an ast node that will set the if1 node"
 
         # This still needs some work to deal with type
@@ -183,7 +197,7 @@ class Compiler(sap.compiler_base.CompilerBase):
     def Not(self, node):
         return self.graphs[-1].addnode(self.m.IFNot)
 
-    def UnaryOp(self,node):
+    def UnaryOp(self, node):
         """Unary operator"""
 
         a = self.visit(node.operand)
@@ -200,40 +214,52 @@ class Compiler(sap.compiler_base.CompilerBase):
         return a
 
     def Or(self, node):
-        raise NotImplementedError('Or')
+        self.default(node)
+        return
 
     def And(self, node):
-        raise NotImplementedError('And')
+        self.default(node)
+        return
 
     def Eq(self, node):
-        raise NotImplementedError('Eq')
+        self.default(node)
+        return
 
     def NotEq(self, node):
-        raise NotImplementedError('NotEq')
+        self.default(node)
+        return
 
     def Lt(self, node):
-        raise NotImplementedError('Lt')
+        self.default(node)
+        return
 
     def LtE(self, node):
-        raise NotImplementedError('LtE')
+        self.default(node)
+        return
 
     def Gt(self, node):
-        raise NotImplementedError('Gt')
+        self.default(node)
+        return
 
     def GtE(self, node):
-        raise NotImplementedError('GtE')
+        self.default(node)
+        return
 
     def Is(self, node):
-        raise NotImplementedError('Is')
+        self.default(node)
+        return
 
     def IsNot(self, node):
-        raise NotImplementedError('IsNot')
+        self.default(node)
+        return
 
     def In(self, node):
-        raise NotImplementedError('In')
+        self.default(node)
+        return
 
     def NotIn(self, node):
-        raise NotImplementedError('NotIn')
+        self.default(node)
+        return
 
     def BoolOp(self, node):
         # assuming that boolop is basically a binop and thus only has 2 args
@@ -285,3 +311,9 @@ class Compiler(sap.compiler_base.CompilerBase):
         N[1].type = self.boolean
 
         return (N[1],)
+
+    def Call(self, node):
+        # TODO: implement call
+        self.default(node)
+        #N = self.graphs[-1].addnode(self.m.IFCall)
+        return

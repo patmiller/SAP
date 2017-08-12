@@ -1,9 +1,11 @@
 import collections
 
+
 class SymbolTable(collections.MutableMapping):
     def __init__(self):
         """Initialize the symbol table to an empty stack"""
         self.stack = []
+        self.push()
         return
 
     def push(self):
@@ -20,7 +22,7 @@ class SymbolTable(collections.MutableMapping):
 
     def __len__(self):
         """Return total number of elements in the symbol table"""
-        return sum(map(len(self.stack)))
+        return sum(map(len, self.stack))
 
     def __iter__(self):
         """Iterator to the stack"""
@@ -29,23 +31,24 @@ class SymbolTable(collections.MutableMapping):
                 yield k
         return
 
-    def top(self,symbol):
+    def top(self, symbol):
         """Look in the top level of the symbol table for the symbol"""
         return self.stack[-1].get(symbol)
 
-    def __getitem__(self,symbol):
+    def __getitem__(self, symbol):
         """Get the value that is stored under symbol"""
         for d in reversed(self.stack):
             v = d.get(symbol)
-            if v is not None: return v
+            if v is not None:
+                return v
         return None
 
-    def __setitem__(self,symbol,value):
+    def __setitem__(self, symbol, value):
         """Set the value of symbol to be value"""
         self.stack[-1][symbol] = value
         return
 
-    def __delitem__(self,symbol):
+    def __delitem__(self, symbol):
         """Deletes and returns the item associated with symbol"""
         for d in reversed(self.stack):
             v = d.get(symbol)
@@ -55,13 +58,19 @@ class SymbolTable(collections.MutableMapping):
                 return item
         return None
 
-    def find(self,symbol):
+    def find(self, symbol):
         """Returns a integer that gives the position of the symbol in the table"""
-        for i in reversed(range(len(self.stack))):
+        for i in reversed(range(self.num_levels)):
             if symbol in self.stack[i]:
                 return i
         return -1
 
     @property
+    def functions(self):
+        """Returns a dict of the functions that are in the global scope"""
+        return self.stack[0]
+
+    @property
     def num_levels(self):
+        """Returns the number of levels of the symbol table"""
         return len(self.stack)

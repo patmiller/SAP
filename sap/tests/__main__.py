@@ -8,4 +8,3 @@ if __name__ == '__main__':
     doctest.testmod()
     import unittest
     unittest.main()
-    

@@ -1,20 +1,17 @@
 import unittest
 import ast
 
+from sap.util import *
 from sap.error import *
 from sap.compiler_base import *
 
-def get_func_code():
-    ret = 'def three():\n'
-    ret += '\tv = 3\n'
-    ret += '\treturn v'
-    return ret
 
 def get_func():
     def three():
         v = 3
         return v
     return three
+
 
 class TestError(unittest.TestCase):
     """Test the Errors API"""
@@ -23,9 +20,11 @@ class TestError(unittest.TestCase):
         """Set up a simple SAP object to pass into errors"""
         self.base = CompilerBase()
         self.base.function = get_func()
+
         self.base.symtab.push()
         self.base.symtab['v'] = 3
-        src = ast.parse(get_func_code())
+
+        src = ast.parse(get_func_code(self.base.function))
         self.func_node = src.body[0]
         self.assign_node = self.func_node.body[0]
         self.target = self.assign_node.targets[0]
@@ -40,7 +39,8 @@ class TestError(unittest.TestCase):
         """Make sure that BaseError cannot be created"""
         with self.assertRaises(NotImplementedError) as e:
             a = BaseError()
-        self.assertIn('BaseError cannot be initialized - use SemanticError instead', e.exception.message)
+        self.assertIn(
+            'BaseError cannot be initialized - use SemanticError instead', e.exception.message)
         return
 
     def test_SemanticError(self):
@@ -55,16 +55,20 @@ class TestError(unittest.TestCase):
         self.assertIn('Expected arity of 2, actual arity of 1', ae.message)
         with self.assertRaises(AssertionError) as e:
             ae = ArityError(self.base, self.func_node, 2, 2)
-        self.assertIn('Trying to throw an ArityError where actual is equal to expected', e.exception.message)
+        self.assertIn(
+            'Trying to throw an ArityError where actual is equal to expected', e.exception.message)
         return
 
     def test_AssignmentArityError(self):
         """Test the AssignmentArityError API"""
-        aae = AssignmentArityError(self.base, self.assign_node, [1, 2], [1, 2, 3])
+        aae = AssignmentArityError(
+            self.base, self.assign_node, [1, 2], [1, 2, 3])
         self.assertIn('lhs has arity 2, rhs has arity 3', aae.message)
         with self.assertRaises(AssertionError) as e:
-            aae = AssignmentArityError(self.base, self.func_node, [1, 2], [1, 2, 3])
-        self.assertIn('node passed into AssignmentArityError must be of type ast.Assign', e.exception.message)
+            aae = AssignmentArityError(
+                self.base, self.func_node, [1, 2], [1, 2, 3])
+        self.assertIn(
+            'node passed into AssignmentArityError must be of type ast.Assign', e.exception.message)
         return
 
     def test_NotSupportedError(self):
@@ -76,13 +80,14 @@ class TestError(unittest.TestCase):
     def test_SymbolTableError(self):
         """Test the SymbolTableError API"""
         ste = SymbolTableError(self.base, self.func_node)
-        self.assertIn('Symbol table has 1 levels', ste.message)
+        self.assertIn('Symbol table has 2 levels', ste.message)
         return
 
     def test_SingleAssignmentError(self):
         """Test the SingleAssignmentError API"""
         sae = SingleAssignmentError(self.base, self.target)
-        self.assertIn('Single Assignment Violation, v exists in level 0 of the symbol table', sae.message)
+        self.assertIn(
+            'Single Assignment Violation, v exists in level 1 of the symbol table', sae.message)
         return
 
     def test_SymbolLookupError(self):
@@ -109,6 +114,7 @@ class TestError(unittest.TestCase):
         self.assertIn('Types do not match', ste.message)
         return
 
+
 class CompilerErrorTest(unittest.TestCase):
     """Test the CompilerError API"""
 
@@ -118,7 +124,7 @@ class CompilerErrorTest(unittest.TestCase):
         self.base.function = get_func()
         self.base.symtab.push()
         self.base.symtab['v'] = 3
-        src = ast.parse(get_func_code())
+        src = ast.parse(get_func_code(self.base.function))
         self.func_node = src.body[0]
         self.assign_node = self.func_node.body[0]
         self.target = self.assign_node.targets[0]
@@ -133,7 +139,8 @@ class CompilerErrorTest(unittest.TestCase):
         """Test initialization of CompilerBase"""
         with self.assertRaises(AssertionError) as e:
             a = CompilerError([1, 2, 3])
-        self.assertIn('Compiler passed in to CompilerError is not valid', e.exception.message)
+        self.assertIn(
+            'Compiler passed in to CompilerError is not valid', e.exception.message)
         return
 
     def test_semantic_error(self):
@@ -151,7 +158,8 @@ class CompilerErrorTest(unittest.TestCase):
     def test_assignment_arity_error(self):
         """Check that CompilerError makes a AssignmentArityError"""
         with self.assertRaises(AssignmentArityError):
-            self.base.error.assignment_arity_error(self.assign_node, [1, 2, 3], [1, 2])
+            self.base.error.assignment_arity_error(
+                self.assign_node, [1, 2, 3], [1, 2])
         return
 
     def test_not_supported_error(self):
