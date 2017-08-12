@@ -3,7 +3,7 @@ import collections
 
 class SymbolTable(collections.MutableMapping):
     def __init__(self):
-        """Initialize the symbol table to an empty stack"""
+        """Initialize the symbol table to a stack with global scope"""
         self.stack = []
         self.push()
         return
