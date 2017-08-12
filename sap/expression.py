@@ -32,7 +32,7 @@ class CompilerExpression(sap.compiler_base.CompilerBase):
         raise NotImplementedError(node.ctx)
 
     def Tuple(self, node):
-        # catenate all the tuples for the rhs into one
+        # concatenate all the tuples for the rhs into one
         return sum((self.visit(x) for x in node.elts), ())
 
     def Add(self, node):
@@ -49,6 +49,9 @@ class CompilerExpression(sap.compiler_base.CompilerBase):
 
     def Mod(self, node):
         return self.graphs[-1].addnode(self.m.IFMod)
+
+    def Pow(self, node):
+        return self.graphs[-1].addnode(self.m.IFExp)
 
     def BinOp(self, node):
         "The op is just an ast node that will set the if1 node"
@@ -100,28 +103,22 @@ class CompilerExpression(sap.compiler_base.CompilerBase):
         return a
 
     def Or(self, node):
-        self.default(node)
-        return
+        return self.graphs[-1].addnode(self.m.IFOr)
 
     def And(self, node):
-        self.default(node)
-        return
+        return self.graphs[-1].addnode(self.m.IFAnd)
 
     def Eq(self, node):
-        self.default(node)
-        return
+        return self.graphs[-1].addnode(self.m.IFEqual)
 
     def NotEq(self, node):
-        self.default(node)
-        return
+        return self.graphs[-1].addnode(self.m.IFNotEqual)
 
     def Lt(self, node):
-        self.default(node)
-        return
+        return self.graphs[-1].addnode(self.m.IFLess)
 
     def LtE(self, node):
-        self.default(node)
-        return
+        return self.graphs[-1].addnode(self.m.IFLessEqual)
 
     def Gt(self, node):
         self.default(node)
@@ -202,4 +199,9 @@ class CompilerExpression(sap.compiler_base.CompilerBase):
         # TODO: implement call
         self.default(node)
         #N = self.graphs[-1].addnode(self.m.IFCall)
+        return
+
+    def BuiltInFunction(self, node):
+        # built-in function list: max, min, abs
+        self.default(node)
         return

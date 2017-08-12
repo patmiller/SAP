@@ -7,7 +7,7 @@ import sap.expression
 
 class Compiler(sap.expression.CompilerExpression):
     def __init__(self):
-        sap.compiler_base.CompilerBase.__init__(self)
+        sap.expression.CompilerExpression.__init__(self)
         return
 
     def __call__(self, *types):

@@ -2,7 +2,11 @@
 
 ## Language Updates
 - Build compiler.py
+  - Make Num and NameConstant in expression return NoOp nodes
+  - Build nodes in expression with IFX.h update
 - Test compiler
+- type casting
+  - automatic type casting on simple ops
 - Make docstrings better
   - Come up with a template for docstrings
   - Maybe use the sphinx template so that documentation can be generated??
@@ -14,8 +18,6 @@
 - Notion of state - old()
 - while loops
 - for loops
-- type casting
-  - automatic type casting on simple ops
 - external functions
   - sin, cos, tan, etc.
 

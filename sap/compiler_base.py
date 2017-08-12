@@ -27,6 +27,6 @@ class CompilerBase(object):
         return method(node, *args)
 
     def default(self, node):
-        self.error.semantic_error(
+        self.error.not_supported_error(
             node, 'not implemented %s' % type(node).__name__)
         return

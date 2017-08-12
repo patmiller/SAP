@@ -349,6 +349,8 @@ enum IF1Opcodes {
   IFAElementN = 159,
   IFAElementP = 160,
   IFAElementM = 161,
+  IFAnd = 202,
+  IFOr = 203,
 
   IFSGraph = 1000,
   IFLGraph = 1001,
