@@ -1,8 +1,6 @@
 # TODO List
 
 ## Language Updates
-- Build up all types of expressions - Different class maybe??
-- Test expressions
 - Build compiler.py
 - Test compiler
 - Make docstrings better
