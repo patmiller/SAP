@@ -55,71 +55,157 @@ PyObject* module::interpret_node(PyObject* self, PyObject* interpreter, PyObject
   ssize_t argpos = 2;
   ssize_t lastpos = PyTuple_GET_SIZE(args);
 
-  // Make a frame for the edges in the node and set the offsets in the edges
-  ssize_t framesize = N->inputs.size() + N->outputs.size();
-  PyOwned frame(PyList_New(framesize));
-  if (!frame) return nullptr;
-  ssize_t i = 0;
+  // The inputs to the method are the node and all its inputs
+  PyOwned inputs(PyTuple_New(N->inputs.size()+1));
+  if (!inputs) return nullptr;
+  Py_INCREF(node);
+  PyTuple_SET_ITEM(inputs.borrow(),0,node);
+  ssize_t i = 1;
   for(auto x:N->inputs) {
     x.second->foffset = i;
     if (x.second->literal.size()) {
-      PyList_SET_ITEM(frame.borrow(),i++,cxx->literal_to_python(x.second));
+      PyTuple_SET_ITEM(inputs.borrow(),i++,cxx->literal_to_python(x.second));
       if (PyErr_Occurred()) return nullptr;
     } else if (argpos == lastpos) {
       return PyErr_Format(PyExc_TypeError,"not all inputs were set");
     } else {
       PyObject* P = PyTuple_GET_ITEM(args,argpos++);
       Py_INCREF(P);
-      PyList_SET_ITEM(frame.borrow(),i++,P);
+      PyTuple_SET_ITEM(inputs.borrow(),i++,P);
     }
   }
   if (argpos != lastpos) {
     return PyErr_Format(PyExc_TypeError,"not all inputs were used");
   }
-  for(auto x:N->outputs) {
-    x.second->foffset = i;
-    Py_INCREF(Py_None);
-    PyList_SET_ITEM(frame.borrow(),i++,Py_None);
-  }
 
-  // Call the interpreter to fill in the frame
-  PyOwned nothing(PyObject_CallMethod(interpreter,(char*)opname.c_str(),(char*)"OO",node,frame.borrow()));
-  if (!nothing) return nullptr;
+  PyOwned method(PyObject_GetAttrString(interpreter,opname.c_str()));
+  if (!method) return nullptr;
 
-  // If we have one value, return it.  Otherwise make a tuple
-  switch(N->outputs.size()) {
-  case 0:
-    Py_RETURN_NONE;
-  case 1: {
-    auto it = N->outputs.begin();
-    auto result = PyList_GET_ITEM(frame.borrow(),it->second->foffset);
-    if (result == Py_None) {
-      return PyErr_Format(PyExc_ValueError,"port %ld was not computed",it->first);
-    }
-    Py_INCREF(result);
-    return result;
-  }
-  default:;
-  }
+  // Call the node method
+  PyOwned outputs(PyObject_CallObject(method.borrow(),inputs.borrow()));
 
-  PyOwned result(PyTuple_New(N->outputs.size()));
-  ssize_t j = 0;
-  if (!result) return nullptr;
-  for(auto x:N->outputs) {
-    printf("Do port %ld fo=%zd\n",x.first,x.second->foffset);
-    auto v = PyList_GET_ITEM(frame.borrow(),x.second->foffset);
-    if (v == Py_None) {
-      return PyErr_Format(PyExc_ValueError,"port %ld was not computed",x.first);
-    }
-    Py_INCREF(v);
-    PyTuple_SET_ITEM(result.borrow(),j++,v);
+  // Single output?
+  if (N->outputs.size() == 1) return outputs.incref();
+  if (!PyTuple_Check(outputs.borrow())) {
+    return PyErr_Format(PyExc_TypeError,"Expected %zd outputs, got one",N->outputs.size());
   }
-  return result.incref();
+  if (N->outputs.size() != PyTuple_GET_SIZE(outputs.borrow())) {
+    return PyErr_Format(PyExc_TypeError,"Expected %zd outputs, got %zd",N->outputs.size(),PyTuple_GET_SIZE(outputs.borrow()));
+  }
+  return outputs.incref();
 }
 
 PyObject* module::interpret_graph(PyObject* self, PyObject* interpreter, PyObject* node, PyObject* args) {
   auto cxx = reinterpret_cast<python*>(self)->cxx;
-  return TODO("interpret a graph");
+  auto G = reinterpret_cast<graph::python*>(node)->cxx;
+  
+  // We will build a frame with all the inputs and outputs
+  PyOwned frame(PyList_New(0));
+  if (!frame) return nullptr;
+
+  // We start with the graph outputs (function inputs)
+  if (G->outputs.size() != PyTuple_GET_SIZE(args)-2) {
+    return PyErr_Format(PyExc_TypeError,"graph expects %zd starting values, has %zd",
+			G->outputs.size(),
+			PyTuple_GET_SIZE(args)-2);
+  }
+  for(auto x:G->outputs) {
+    ssize_t n = PyList_GET_SIZE(frame.borrow());
+    x.second->foffset = n;
+    PyObject* X = PyTuple_GET_ITEM(args,2+n);
+    if (PyList_Append(frame.borrow(),X) != 0) return nullptr;
+  }
+
+  // A little lambda to deal with node inputs
+  auto mod = G->weakmodule.lock();
+  auto add_to_frame = [mod](std::shared_ptr<nodebase> N,PyObject* F) {
+    for(auto p:N->inputs) {
+      if (p.second->literal.size()) {
+	PyOwned lit(mod->literal_to_python(p.second));
+	if (!lit) return reinterpret_cast<PyObject*>(0); // Arrgh!  C++11 lambda weirdness on return
+	ssize_t n = PyList_GET_SIZE(F);
+	p.second->foffset = n;
+	if (PyList_Append(F,lit.borrow()) != 0) return reinterpret_cast<PyObject*>(0);
+      } else {
+	auto src = p.second->weakport.lock();
+	if (!src) return DISCONNECTED;
+	p.second->foffset = src->foffset;
+      }
+    }
+    return Py_None;
+  };
+
+  // For every node, input edges refer to frame objects or literals (immediate frame fills)
+  // output edges reserve an entry in the frame
+  if (!mod) return DISCONNECTED;
+  for(ssize_t i=0; i<PyList_GET_SIZE(G->children.borrow()); ++i) {
+    PyObject* P = PyList_GET_ITEM(G->children.borrow(),i);
+    if (!PyObject_TypeCheck(P,&node::Type)) continue; // ignore weird stuff
+    auto N = reinterpret_cast<node::python*>(P)->cxx;
+
+    // Inputs come from matching src or from the literal
+    add_to_frame(N,frame.borrow());
+
+    // Outputs are set to None in the frame
+    for(auto p:N->outputs) {
+      ssize_t n = PyList_GET_SIZE(frame.borrow());
+      p.second->foffset = n;
+      if (PyList_Append(frame.borrow(),Py_None) != 0) return nullptr;
+    }
+  }
+
+  // Go through each node and execute it.  Outputs get directed to proper frame location
+  for(ssize_t i=0; i<PyList_GET_SIZE(G->children.borrow()); ++i) {
+    PyObject* P = PyList_GET_ITEM(G->children.borrow(),i);
+    auto N = reinterpret_cast<node::python*>(P)->cxx;
+
+    // Gather the inputs from the frame
+    PyOwned args(PyTuple_New(N->inputs.size()+1));
+    if (!args) return nullptr;
+
+    ssize_t j = 0;
+    Py_INCREF(P);
+    PyTuple_SET_ITEM(args.borrow(),j++,P);
+    for(auto p:N->inputs) {
+      auto v = PyList_GET_ITEM(frame.borrow(),p.second->foffset);
+      Py_INCREF(v);
+      PyTuple_SET_ITEM(args.borrow(),j++,v);
+    }
+    std::string opname = cxx->lookup(N->opcode);
+    PyOwned method(PyObject_GetAttrString(interpreter,opname.c_str()));
+    if (!method) return nullptr;
+
+    PyOwned out(PyObject_CallObject(method.borrow(),args.borrow()));
+    if (!out) return nullptr;
+
+    if (N->outputs.size() == 1) {
+      auto outport = N->outputs.begin()->second->foffset;
+      PyList_SET_ITEM(frame.borrow(),outport,out.incref());
+    } else {
+      return TODO("n output");
+    }
+  }    
+
+  auto inport_value = [mod](std::shared_ptr<inport> cxx,PyObject* F) {
+    if (cxx->literal.size()) {
+      return mod->literal_to_python(cxx);
+    }
+
+    // Connected to some source (value in frame)
+    auto src = cxx->weakport.lock();
+    if (!src) return DISCONNECTED;
+    PyObject* v = PyList_GET_ITEM(F,src->foffset);
+    Py_INCREF(v);
+    return v;
+  };
+
+  // Create a tuple for the outputs (may be 0-ary (unlikely), 1-ary, or n-ary)
+  PyOwned result(PyTuple_New(G->inputs.size()));
+  ssize_t n = 0;
+  for(auto port:G->inputs) {
+    PyTuple_SET_ITEM(result.borrow(),n++,inport_value(port.second,frame.borrow()));
+  }
+  return result.incref();
 }
 
 PyObject* module::interpret(PyObject* self,PyObject* args) {

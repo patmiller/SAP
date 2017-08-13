@@ -104,7 +104,9 @@ initif1(void) {
   PyDict_SetItemString(DEFAULT_OPCODES,"IFInt",PyInt_FromLong(IFInt)); if (PyErr_Occurred()) return;
   PyDict_SetItemString(DEFAULT_OPCODES,"IFIsError",PyInt_FromLong(IFIsError)); if (PyErr_Occurred()) return;
   PyDict_SetItemString(DEFAULT_OPCODES,"IFLess",PyInt_FromLong(IFLess)); if (PyErr_Occurred()) return;
-  PyDict_SetItemString(DEFAULT_OPCODES,"IFLessEqual",PyInt_FromLong(IFLessEqual)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFLessEqual",PyInt_FromLong(IFGreatEqual)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFGreat",PyInt_FromLong(IFLess)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFGreatEqual",PyInt_FromLong(IFGreatEqual)); if (PyErr_Occurred()) return;
   PyDict_SetItemString(DEFAULT_OPCODES,"IFMax",PyInt_FromLong(IFMax)); if (PyErr_Occurred()) return;
   PyDict_SetItemString(DEFAULT_OPCODES,"IFMin",PyInt_FromLong(IFMin)); if (PyErr_Occurred()) return;
   PyDict_SetItemString(DEFAULT_OPCODES,"IFMinus",PyInt_FromLong(IFMinus)); if (PyErr_Occurred()) return;

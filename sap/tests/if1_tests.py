@@ -917,10 +917,7 @@ E 0 2 1 2 4''')
 
     def test_interpret_node(self):
         class I(object):
-            def IFPlus(self,n,frame):
-                v = frame[n(1).foffset]+frame[n(2).foffset]
-                frame[n[1].foffset] = v
-                return
+            def IFPlus(self,n,a,b): return a+b
 
         m = sap.if1.Module()
         f = m.addfunction("f")
@@ -932,5 +929,67 @@ E 0 2 1 2 4''')
         f(1) << N[1]
         v = m.interpret(I(),N,3,4)
         self.assertEqual(v,7)
+        return
+            
+    def test_interpret_litgraph(self):
+        class I(object):
+            def IFPlus(self,n,a,b): return a+b
+            def IFTimes(self,n,a,b): return a*b
+
+        m = sap.if1.Module()
+        f = m.addfunction("f")
+
+        f(1) << 3
+        v = m.interpret(I(),f)
+        self.assertEqual(v,(3,))
+        return
+            
+    def test_interpret_graph(self):
+        class I(object):
+            def IFPlus(self,n,a,b): return a+b
+            def IFTimes(self,n,a,b): return a*b
+
+        m = sap.if1.Module()
+        f = m.addfunction("f")
+        f[1] = f[2] = m.integer
+
+        P = f.addnode(m.IFPlus)
+        P(1) << f[1]
+        P(2) << f[2]
+        P[1] = m.integer
+
+        T = f.addnode(m.IFTimes)
+        T(1) << P[1]
+        T(2) << 10
+        T[1] = m.integer
+
+        f(1) << T[1]
+        v = m.interpret(I(),f,3,4)
+        self.assertEqual(v,(70,))
+        return
+
+    def test_interpret_graph2(self):
+        class I(object):
+            def IFPlus(self,n,a,b): return a+b
+            def IFTimes(self,n,a,b): return a*b
+
+        m = sap.if1.Module()
+        f = m.addfunction("f")
+        f[1] = f[2] = m.integer
+
+        P = f.addnode(m.IFPlus)
+        P(1) << f[1]
+        P(2) << f[2]
+        P[1] = m.integer
+
+        T = f.addnode(m.IFTimes)
+        T(1) << P[1]
+        T(2) << 10
+        T[1] = m.integer
+
+        f(1) << T[1]
+        f(2) << P[1]
+        v = m.interpret(I(),f,3,4)
+        self.assertEqual(v,(70,7))
         return
             
