@@ -3,6 +3,7 @@ import unittest
 from sap.compiler import Compiler
 from sap.error import *
 
+
 class TestCompiler(unittest.TestCase):
     def test_error(self):
         SAP = Compiler()
@@ -10,18 +11,18 @@ class TestCompiler(unittest.TestCase):
             @SAP()
             def three():
                 return x
-        self.assertIn('Name x not found in symbol table',e.exception.message)
+        self.assertIn('Name x not found in symbol table', e.exception.message)
         return
-
 
     def test_three(self):
         SAP = Compiler()
+
         @SAP()
         def three():
             return 3
-        self.assertEqual(three.if1,'X 11 "three"\nL     0 1 4 "3"')
+        self.assertEqual(three.if1, 'X 11 "three"\nL     0 1 4 "3"')
 
-        self.assertEqual(SAP.m.if1,'''T 1 1 0 %na=boolean
+        self.assertEqual(SAP.m.if1, '''T 1 1 0 %na=boolean
 T 2 1 1 %na=character
 T 3 1 2 %na=doublereal
 T 4 1 3 %na=integer
@@ -38,24 +39,25 @@ L     0 1 4 "3"''')
 
     def test_plus1(self):
         SAP = Compiler()
+
         @SAP(SAP.integer)
         def plus1(x):
-            return x+1
-        self.assertEqual(plus1.if1,'''X 11 "plus1"
+            return x + 1
+        self.assertEqual(plus1.if1, '''X 11 "plus1"
 E 1 1 0 1 4
 N 1 141
 E 0 1 1 1 4 %na=x
 L     1 2 4 "1"''')
         return
 
-    
     def test_assign(self):
         SAP = Compiler()
+
         @SAP(SAP.integer)
         def f(x):
-            y,z = x*10,20+2
-            return y+z,z
-        self.assertEqual(f.if1,'''X 12 "f"
+            y, z = x * 10, 20 + 2
+            return y + z, z
+        self.assertEqual(f.if1, '''X 12 "f"
 E 3 1 0 1 4
 E 2 1 0 2 4 %na=z
 N 1 152
