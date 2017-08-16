@@ -349,12 +349,12 @@ enum IF1Opcodes {
   IFAElementN = 159,
   IFAElementP = 160,
   IFAElementM = 161,
-  IFAnd = 202,
-  IFOr = 203,
 
   // These are too handy to skip
   IFGreat = 200,
   IFGreatEqual = 201,
+  IFAnd = 202,
+  IFOr = 203,
 
   IFSGraph = 1000,
   IFLGraph = 1001,
