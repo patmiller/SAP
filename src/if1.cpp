@@ -136,6 +136,11 @@ initif1(void) {
   PyDict_SetItemString(DEFAULT_OPCODES,"IFAElementN",PyInt_FromLong(IFAElementN)); if (PyErr_Occurred()) return;
   PyDict_SetItemString(DEFAULT_OPCODES,"IFAElementP",PyInt_FromLong(IFAElementP)); if (PyErr_Occurred()) return;
   PyDict_SetItemString(DEFAULT_OPCODES,"IFAElementM",PyInt_FromLong(IFAElementM)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFGreat",PyInt_FromLong(IFGreat)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFGreatEqual",PyInt_FromLong(IFGreatEqual)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFAnd",PyInt_FromLong(IFAnd)); if (PyErr_Occurred()) return;
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFOr",PyInt_FromLong(IFOr)); if (PyErr_Occurred()) return;
+  
   PyDict_SetItemString(DEFAULT_OPCODES,"IFSGraph",PyInt_FromLong(IFSGraph)); if (PyErr_Occurred()) return;
   PyDict_SetItemString(DEFAULT_OPCODES,"IFLGraph",PyInt_FromLong(IFLGraph)); if (PyErr_Occurred()) return;
   PyDict_SetItemString(DEFAULT_OPCODES,"IFIGraph",PyInt_FromLong(IFIGraph)); if (PyErr_Occurred()) return;

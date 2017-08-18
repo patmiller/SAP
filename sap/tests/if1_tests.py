@@ -995,3 +995,28 @@ E 0 2 1 2 4''')
         v = m.interpret(I(),f,3,4)
         self.assertEqual(v,(70,7))
         return
+
+    def test_interpret_compound(self):
+        class I(object):
+            def IFPlus(self,n,a,b): return a+b
+            def IFTimes(self,n,a,b): return a*b
+
+        m = sap.if1.Module()
+        f = m.addfunction("f")
+        f[1] = f[2] = m.integer
+
+        P = f.addnode(m.IFPlus)
+        P(1) << f[1]
+        P(2) << f[2]
+        P[1] = m.integer
+
+        T = f.addnode(m.IFTimes)
+        T(1) << P[1]
+        T(2) << 10
+        T[1] = m.integer
+
+        f(1) << T[1]
+        f(2) << P[1]
+        v = m.interpret(I(),f,3,4)
+        self.assertEqual(v,(70,7))
+        return
