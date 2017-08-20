@@ -56,11 +56,13 @@ PyObject* module::interpret_node(PyObject* self, PyObject* interpreter, PyObject
   ssize_t lastpos = PyTuple_GET_SIZE(args);
 
   // The inputs to the method are the node and all its inputs
-  PyOwned inputs(PyTuple_New(N->inputs.size()+1));
+  PyOwned inputs(PyTuple_New(N->inputs.size()+2));
   if (!inputs) return nullptr;
+  Py_INCREF(self);
+  PyTuple_SET_ITEM(inputs.borrow(),0,self);
   Py_INCREF(node);
-  PyTuple_SET_ITEM(inputs.borrow(),0,node);
-  ssize_t i = 1;
+  PyTuple_SET_ITEM(inputs.borrow(),1,node);
+  ssize_t i = 2;
   for(auto x:N->inputs) {
     x.second->foffset = i;
     if (x.second->literal.size()) {
@@ -84,10 +86,15 @@ PyObject* module::interpret_node(PyObject* self, PyObject* interpreter, PyObject
   // Call the node method
   PyOwned outputs(PyObject_CallObject(method.borrow(),inputs.borrow()));
 
-  // Single output?
-  if (N->outputs.size() == 1) return outputs.incref();
+  // Single output?  Pack it into a tuple for standardization
   if (!PyTuple_Check(outputs.borrow())) {
-    return PyErr_Format(PyExc_TypeError,"Expected %zd outputs, got one",N->outputs.size());
+    if (N->outputs.size() != 1) {
+      return PyErr_Format(PyExc_TypeError,"Expected %zd outputs, got one",N->outputs.size());
+    }
+    PyOwned one(PyTuple_New(1));
+    if (!one) return nullptr;
+    PyTuple_SET_ITEM(one.borrow(),0,outputs.incref());
+    outputs = one.incref();
   }
   if (N->outputs.size() != PyTuple_GET_SIZE(outputs.borrow())) {
     return PyErr_Format(PyExc_TypeError,"Expected %zd outputs, got %zd",N->outputs.size(),PyTuple_GET_SIZE(outputs.borrow()));
@@ -117,7 +124,8 @@ PyObject* module::interpret_graph(PyObject* self, PyObject* interpreter, PyObjec
   }
 
   // A little lambda to deal with node inputs
-  auto mod = G->weakmodule.lock();
+  auto mod = G->my_module();
+  if (!mod) return DISCONNECTED;
   auto add_to_frame = [mod](std::shared_ptr<nodebase> N,PyObject* F) {
     for(auto p:N->inputs) {
       if (p.second->literal.size()) {
@@ -137,7 +145,6 @@ PyObject* module::interpret_graph(PyObject* self, PyObject* interpreter, PyObjec
 
   // For every node, input edges refer to frame objects or literals (immediate frame fills)
   // output edges reserve an entry in the frame
-  if (!mod) return DISCONNECTED;
   for(ssize_t i=0; i<PyList_GET_SIZE(G->children.borrow()); ++i) {
     PyObject* P = PyList_GET_ITEM(G->children.borrow(),i);
     if (!PyObject_TypeCheck(P,&node::Type)) continue; // ignore weird stuff
@@ -160,10 +167,12 @@ PyObject* module::interpret_graph(PyObject* self, PyObject* interpreter, PyObjec
     auto N = reinterpret_cast<node::python*>(P)->cxx;
 
     // Gather the inputs from the frame
-    PyOwned args(PyTuple_New(N->inputs.size()+1));
+    PyOwned args(PyTuple_New(N->inputs.size()+2));
     if (!args) return nullptr;
 
     ssize_t j = 0;
+    Py_INCREF(self);
+    PyTuple_SET_ITEM(args.borrow(),j++,self);
     Py_INCREF(P);
     PyTuple_SET_ITEM(args.borrow(),j++,P);
     for(auto p:N->inputs) {
@@ -180,7 +189,13 @@ PyObject* module::interpret_graph(PyObject* self, PyObject* interpreter, PyObjec
 
     if (N->outputs.size() == 1) {
       auto outport = N->outputs.begin()->second->foffset;
-      PyList_SET_ITEM(frame.borrow(),outport,out.incref());
+      if (PyTuple_Check(out.borrow()) && PyTuple_GET_SIZE(out.borrow()) == 1) {
+	PyObject* v = PyTuple_GET_ITEM(out.borrow(),0);
+	Py_INCREF(v);
+	PyList_SET_ITEM(frame.borrow(),outport,v);
+      } else {
+	PyList_SET_ITEM(frame.borrow(),outport,out.incref());
+      }
     } else {
       return TODO("n output");
     }

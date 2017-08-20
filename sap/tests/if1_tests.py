@@ -920,7 +920,7 @@ E 0 2 1 2 4''')
 
     def test_interpret_node(self):
         class I(object):
-            def IFPlus(self,n,a,b): return a+b
+            def IFPlus(self,m,n,a,b): return a+b
 
         m = sap.if1.Module()
         f = m.addfunction("f")
@@ -931,13 +931,13 @@ E 0 2 1 2 4''')
         N[1] = m.integer
         f(1) << N[1]
         v = m.interpret(I(), N, 3, 4)
-        self.assertEqual(v, 7)
+        self.assertEqual(v, (7,))
         return
             
     def test_interpret_litgraph(self):
         class I(object):
-            def IFPlus(self,n,a,b): return a+b
-            def IFTimes(self,n,a,b): return a*b
+            def IFPlus(self,m,n,a,b): return a+b
+            def IFTimes(self,m,n,a,b): return a*b
 
         m = sap.if1.Module()
         f = m.addfunction("f")
@@ -949,8 +949,8 @@ E 0 2 1 2 4''')
             
     def test_interpret_graph(self):
         class I(object):
-            def IFPlus(self,n,a,b): return a+b
-            def IFTimes(self,n,a,b): return a*b
+            def IFPlus(self,m,n,a,b): return a+b
+            def IFTimes(self,m,n,a,b): return a*b
 
         m = sap.if1.Module()
         f = m.addfunction("f")
@@ -973,8 +973,8 @@ E 0 2 1 2 4''')
 
     def test_interpret_graph2(self):
         class I(object):
-            def IFPlus(self,n,a,b): return a+b
-            def IFTimes(self,n,a,b): return a*b
+            def IFPlus(self,m,n,a,b): return a+b
+            def IFTimes(self,m,n,a,b): return a*b
 
         m = sap.if1.Module()
         f = m.addfunction("f")
@@ -998,25 +998,50 @@ E 0 2 1 2 4''')
 
     def test_interpret_compound(self):
         class I(object):
-            def IFPlus(self,n,a,b): return a+b
-            def IFTimes(self,n,a,b): return a*b
+            def IFPlus(self,m,n,a,b): return a+b
+            def IFMinus(self,m,n,a,b): return a-b
+            def IFIfThenElse(self,m,n,*args):
+                assert args
+                if args[0]:
+                    g = n.children[0]
+                else:
+                    g = n.children[1]
+                return m.interpret(self,g,*args) 
 
         m = sap.if1.Module()
         f = m.addfunction("f")
-        f[1] = f[2] = m.integer
+        f[1] = m.boolean
+        f[2] = f[3] = m.integer
 
-        P = f.addnode(m.IFPlus)
-        P(1) << f[1]
-        P(2) << f[2]
-        P[1] = m.integer
-
-        T = f.addnode(m.IFTimes)
-        T(1) << P[1]
-        T(2) << 10
+        T = f.addnode(m.IFIfThenElse)
+        T(1) << f[1]
+        T(2) << f[2]
+        T(3) << f[3]
         T[1] = m.integer
 
+        truepart = T.addgraph()
+        truepart[1] = m.boolean
+        truepart[2] = truepart[3] = m.integer
+        n = truepart.addnode(m.IFPlus)
+        n[1] = m.integer
+        n(1) << truepart[2]
+        n(2) << truepart[3]
+        truepart(1) << n[1]
+
+        falsepart = T.addgraph()
+        falsepart[1] = m.boolean
+        falsepart[2] = falsepart[3] = m.integer
+        n = falsepart.addnode(m.IFMinus)
+        n[1] = m.integer
+        n(1) << falsepart[2]
+        n(2) << falsepart[3]
+        falsepart(1) << n[1]
+
         f(1) << T[1]
-        f(2) << P[1]
-        v = m.interpret(I(),f,3,4)
-        self.assertEqual(v,(70,7))
+
+        self.assertEqual(m.interpret(I(),f,True,3,4),
+                         (7,))
+        self.assertEqual(m.interpret(I(),f,False,3,4),
+                         (-1,))
+
         return
