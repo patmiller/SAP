@@ -1052,7 +1052,6 @@ E 0 2 1 2 4''')
         
         # Simplest function to call
         three = m.addfunction("three")
-        for x in []: print x
         three(1) << 3
         self.assertEquals(m.interpret(Interpreter(),three),(3,))
 
@@ -1066,4 +1065,73 @@ E 0 2 1 2 4''')
         main(1) << n[1]
 
         self.assertEquals(m.interpret(Interpreter(),main),(3,))
+
+        return
+
+    def test_function_literal_with_args(self):
+        from sap.interpreter import Interpreter
+        m = sap.if1.Module()
+        
+        # function of two args that returns one
+        f = m.addfunction("f")
+        f[1] = f[2] = m.integer
+        n = f.addnode(m.IFPlus)
+        n[1] = m.integer
+        n(1) << f[1]
+        n(2) << f[2]
+
+        f(1) << n[1]
+        self.assertEquals(m.interpret(Interpreter(),f,3,4),(7,))
+
+        # The main function just calls the simple one
+        main = m.addfunction("main")
+
+        n = main.addnode(m.IFCall)
+        n(1) << f
+        n(2) << 30
+        n(3) << 40
+        n[1] = m.integer
+
+        main(1) << n[1]
+
+        self.assertEquals(m.interpret(Interpreter(),main),(70,))
+
+        return
+
+    def test_function_literal_with_args_and_multireturn(self):
+        from sap.interpreter import Interpreter
+        m = sap.if1.Module()
+        
+        # function of two args that returns one
+        f = m.addfunction("f")
+        f[1] = f[2] = m.integer
+
+        p = f.addnode(m.IFPlus)
+        p[1] = m.integer
+        p(1) << f[1]
+        p(2) << f[2]
+
+        t = f.addnode(m.IFTimes)
+        t[1] = m.integer
+        t(1) << f[1]
+        t(2) << f[2]
+
+        f(1) << p[1]
+        f(2) << t[1]
+        self.assertEquals(m.interpret(Interpreter(),f,3,4),(7,12))
+
+        # The main function just calls the simple one
+        main = m.addfunction("main")
+
+        n = main.addnode(m.IFCall)
+        n(1) << f
+        n(2) << 30
+        n(3) << 40
+        n[1] = n[2] = m.integer
+
+        main(1) << n[1]
+        main(2) << n[2]
+
+        self.assertEquals(m.interpret(Interpreter(),main),(70,1200))
+
         return

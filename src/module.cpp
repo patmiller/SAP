@@ -202,17 +202,29 @@ PyObject* module::interpret_graph(PyObject* self, PyObject* interpreter, PyObjec
     PyOwned out(PyObject_CallObject(method.borrow(),args.borrow()));
     if (!out) return nullptr;
 
-    if (N->outputs.size() == 1) {
-      auto outport = N->outputs.begin()->second->foffset;
-      if (PyTuple_Check(out.borrow()) && PyTuple_GET_SIZE(out.borrow()) == 1) {
-	PyObject* v = PyTuple_GET_ITEM(out.borrow(),0);
-	Py_INCREF(v);
-	PyList_SET_ITEM(frame.borrow(),outport,v);
-      } else {
-	PyList_SET_ITEM(frame.borrow(),outport,out.incref());
+    // If we get back a tuple, the size must match the number of outputs
+    if ( PyTuple_Check(out.borrow()) ) {
+      if (PyTuple_GET_SIZE(out.borrow()) != N->outputs.size()) {
+	return PyErr_Format(PyExc_ValueError,"%s expected %zd returns, but returned tuple had %zd values",
+			    opname.c_str(),N->outputs.size(),PyTuple_GET_SIZE(out.borrow()));
       }
-    } else {
-      return TODO("n output");
+      ssize_t i = 0;
+      for(auto x:N->outputs) {
+	PyObject* P = PyTuple_GET_ITEM(out.borrow(),i++);
+	Py_INCREF(P);
+	PyList_SET_ITEM(frame.borrow(),x.second->foffset,P);
+      }
+    }
+
+    // Expected one output (and got back a non-tuple)
+    else if (N->outputs.size() == 1) {
+      auto outport = N->outputs.begin()->second->foffset;
+      PyList_SET_ITEM(frame.borrow(),outport,out.incref());
+    }
+
+    else {
+      return PyErr_Format(PyExc_ValueError,"%s expected %zd returns, but did not generate a tuple",
+			  opname.c_str(),N->outputs.size());
     }
   }    
 
