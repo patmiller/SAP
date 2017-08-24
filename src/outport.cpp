@@ -81,7 +81,7 @@ outport::operator long() {
 
 PyObject* outport::richcompare(PyObject* self,PyObject* other,int op) {
   // Only compare to other outports
-  if (!PyObject_TypeCheck(other,&outport::Type)) return Py_NotImplemented;
+  if (!PyObject_TypeCheck(other,&outport::Type)) return (Py_INCREF(Py_NotImplemented),Py_NotImplemented);
 
   std::shared_ptr<outport> left;
   std::shared_ptr<outport> right;
@@ -94,7 +94,7 @@ PyObject* outport::richcompare(PyObject* self,PyObject* other,int op) {
   case Py_LE:
   case Py_GT:
   case Py_GE:
-    return Py_NotImplemented;
+    return (Py_INCREF(Py_NotImplemented),Py_NotImplemented);
   case Py_NE:
     yes = Py_False;
     no = Py_True;

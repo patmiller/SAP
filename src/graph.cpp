@@ -149,7 +149,7 @@ PyObject* graph::get_nodes(PyObject* self,void*) {
   return cxx->children.incref();
 }
 PyObject* graph::get_if1(PyObject* self,void*) {
-  STATIC_STR(NL,"\n");
+  STATIC_STR(NEWLINE,"\n");
   STATIC_STR(IF1,"if1");
 
   auto cxx = reinterpret_cast<python*>(self)->cxx;
@@ -193,13 +193,17 @@ PyObject* graph::get_if1(PyObject* self,void*) {
   if (!result) return nullptr;
 
   // Finally, all the nodes have to be emitted
-  for(ssize_t i=0;i<PyList_GET_SIZE(cxx->children.borrow()); ++i) {
-    PyString_Concat(result.addr(),NL);
+  ssize_t nnodes = PyList_GET_SIZE(cxx->children.borrow());
+  for(ssize_t i=0;i<nnodes; ++i) {
+    PyString_Concat(result.addr(),NEWLINE);
+    if (!result) return nullptr;
+
     PyObject* T = PyList_GET_ITEM(cxx->children.borrow(),i);
     PyObject* N_if1 = PyObject_GetAttr(T,IF1);
     if (!N_if1) return nullptr;
     PyString_ConcatAndDel(result.addr(),N_if1);
   }
+
 
   return result.incref();
 }

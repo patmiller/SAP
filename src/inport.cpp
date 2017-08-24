@@ -191,10 +191,39 @@ PyObject* inport::cross_graph(std::shared_ptr<outport> out,
 
 PyObject* inport::lshift(PyObject* self, PyObject* other) {
   auto cxx = reinterpret_cast<python*>(self)->cxx;
-  literal_parser_state_t flavor = ERROR;
   std::string literal;
+  std::shared_ptr<type> T;
+
+  auto lookup = [cxx](const char* tname) {
+    std::shared_ptr<type> result;
+    // Get the module
+    std::shared_ptr<module> m;
+    try {
+      auto node = cxx->my_node();
+      auto graph = node->my_graph();
+      m = graph->my_module();
+    } catch (PyObject*) {
+      return result;
+    }
+
+    // Find it in the module dictionary
+    PyObject* T = PyDict_GetItemString(m->dict.borrow(),tname);
+    if (!(T && PyObject_TypeCheck(T,&type::Type))) {
+      PyErr_Format(PyExc_AttributeError,"module does not define type %s",tname);
+      return result;
+    }
+
+    if (!PyObject_TypeCheck(T,&type::Type)) {
+      PyErr_Format(PyExc_ValueError,"%s is not a type is this module",tname);
+      return result;
+    }
+    
+    auto tp = reinterpret_cast<type::python*>(T)->cxx;
+    return tp;
+  };
 
   // If it is None, we delete the edge
+  literal_parser_state_t flavor = ERROR;
   if ( other == Py_None ) {
     return TODO("delete inedge");
   }
@@ -202,17 +231,16 @@ PyObject* inport::lshift(PyObject* self, PyObject* other) {
   // Some kind of literal?
   else if ( other == Py_True ) {
     flavor = BOOLEAN_LITERAL;
-    literal = "true";
+    T = lookup("boolean");
   } else if ( other == Py_False ) {
     flavor = BOOLEAN_LITERAL;
-    literal = "false";
+    T = lookup("boolean");
   } else if ( PyInt_Check(other) ) {
-    flavor = INTEGER_LITERAL;
     PyOwned s(PyObject_Str(other));
     if (!s) return nullptr;
     literal = PyString_AS_STRING(s.borrow());
+    T = lookup("integer");
   } else if ( PyFloat_Check(other) ) {
-    flavor = DOUBLEREAL_LITERAL;
     PyOwned s(PyObject_Str(other));
     if (!s) return nullptr;
     // Have to fix +eNN to dNN and -eNN to dNN
@@ -225,12 +253,34 @@ PyObject* inport::lshift(PyObject* self, PyObject* other) {
     literal = PyString_AS_STRING(noE.borrow());
     // Make sure there is a D in there somewhere
     if (literal.find('d') == literal.npos) literal += 'd';
+
+    T = lookup("doublereal");
   } else if ( PyString_Check(other) ) {
     flavor = parse_literal(PyString_AS_STRING(other));
-    if (flavor == ERROR) {
+    switch(flavor) {
+    case BOOLEAN_LITERAL: T = lookup("boolean"); break;
+    case CHAR_LITERAL: T = lookup("character"); break;
+    case DOUBLEREAL_LITERAL: T = lookup("doublereal"); break;
+    case INTEGER_LITERAL: T = lookup("integer"); break;
+    case NULL_LITERAL: T = lookup("null"); break;
+    case REAL_LITERAL: T = lookup("real"); break;
+    case STRING_LITERAL: T = lookup("string"); break;
+    case ERROR:
+    default:
       return PyErr_Format(PyExc_ValueError,"invalid literal %s",PyString_AS_STRING(other));
     }
     literal = PyString_AS_STRING(other);
+  } else if ( PyObject_TypeCheck(other,&graph::Type) ) {
+    auto function = reinterpret_cast<graph::python*>(other)->cxx;
+    literal = function->name.c_str();
+
+    PyOwned PT(function->my_type());
+    if (!(PT && PyObject_TypeCheck(PT.borrow(),&type::Type))) {
+      PyErr_Format(PyExc_ValueError,"%s does not have a type",literal.c_str());
+      return nullptr;
+    }
+    
+    T = reinterpret_cast<type::python*>(PT.borrow())->cxx;
   }
 
   // An out port?
@@ -262,53 +312,11 @@ PyObject* inport::lshift(PyObject* self, PyObject* other) {
 
   // Something else?
   else {
-    return Py_NotImplemented;
+    return (Py_INCREF(Py_NotImplemented),Py_NotImplemented);
   }
 
-  // If I reach here, I have a literal
-  std::shared_ptr<module> m;
-  try {
-    auto node = cxx->my_node();
-    auto graph = node->my_graph();
-    m = graph->my_module();
-  } catch (PyObject*) {
-    return nullptr;
-  }
-  const char* tname = nullptr;
-  switch(flavor) {
-  case BOOLEAN_LITERAL:
-    tname = "boolean";
-    break;
-  case CHAR_LITERAL:
-    tname = "character";
-    break;
-  case DOUBLEREAL_LITERAL:
-    tname = "doublereal";
-    break;
-  case INTEGER_LITERAL:
-    tname = "integer";
-    break;
-  case NULL_LITERAL:
-    tname = "null";
-    break;
-  case REAL_LITERAL:
-    tname = "real";
-    break;
-  case STRING_LITERAL:
-    tname = "string";
-    break;
-  default:
-    return PyErr_Format(PyExc_NotImplementedError,"parse code %d",flavor);
-  }
-  
-  PyObject* T = PyDict_GetItemString(m->dict.borrow(),tname);
-  if (!(T && PyObject_TypeCheck(T,&type::Type))) {
-    return PyErr_Format(PyExc_AttributeError,"module does not define type %s",tname);
-  }
-
-  auto tp = reinterpret_cast<type::python*>(T)->cxx;
   cxx->literal = literal;
-  cxx->weakliteral_type = tp;
+  cxx->weakliteral_type = T;
   cxx->weakport.reset();
 
   Py_INCREF(self);
@@ -342,7 +350,7 @@ std::shared_ptr<nodebase> inport::my_node() {
 
 PyObject* inport::richcompare(PyObject* self,PyObject* other,int op) {
   // Only compare to other inports
-  if (!PyObject_TypeCheck(other,&inport::Type)) return Py_NotImplemented;
+  if (!PyObject_TypeCheck(other,&inport::Type)) return (Py_INCREF(Py_NotImplemented),Py_NotImplemented);
 
   std::shared_ptr<inport> left;
   std::shared_ptr<inport> right;
@@ -355,7 +363,7 @@ PyObject* inport::richcompare(PyObject* self,PyObject* other,int op) {
   case Py_LE:
   case Py_GT:
   case Py_GE:
-    return Py_NotImplemented;
+    return (Py_INCREF(Py_NotImplemented),Py_NotImplemented);
   case Py_NE:
     yes = Py_False;
     no = Py_True;

@@ -38,7 +38,9 @@ class Interpreter(object):
     def IFAbs(self,m,n,a): return abs(a)
     def IFBindArguments(self,m,n,*args): raise NotImplementedError("IFBindArguments")
     def IFBool(self,m,n,a): return a == True
-    def IFCall(self,m,n,*args): raise NotImplementedError("IFCall")
+    def IFCall(self,m,n,*args):
+        f = args[0]
+        return  m.interpret(self,f,*args[1:])
     def IFChar(self,m,n,a): return chr(a)
     def IFDiv(self,m,n,a,b): return a/b
     def IFDouble(self,m,n,a):

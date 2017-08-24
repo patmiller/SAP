@@ -38,10 +38,23 @@ PyObject* module::literal_to_python(std::shared_ptr<inport> const &p) {
     default: return TODO("unknown basic");
     }
   }
+  case IF_Function: {
+    ssize_t nfunctions = PyList_GET_SIZE(functions.borrow());
+    for(ssize_t i=0;i<nfunctions;++i) {
+      PyObject* P = PyList_GET_ITEM(functions.borrow(),i);
+      if (!PyObject_TypeCheck(P,&graph::Type)) continue; // Skip weird stuff
+      auto F = reinterpret_cast<graph::python*>(P)->cxx;
+      if (F->name == p->literal) {
+	Py_INCREF(P);
+	return P;
+      }
+    }
+    return PyErr_Format(PyExc_KeyError,"no such function %s",p->literal.c_str());
+  }
   default: ;
   }
     
-  return PyErr_Format(PyExc_TypeError,"Invalid literal type");
+  return PyErr_Format(PyExc_TypeError,"Invalid literal type %ld:%s",T->code,p->literal.c_str());
 }
 
 PyObject* module::interpret_node(PyObject* self, PyObject* interpreter, PyObject* node, PyObject* args) {
@@ -66,7 +79,9 @@ PyObject* module::interpret_node(PyObject* self, PyObject* interpreter, PyObject
   for(auto x:N->inputs) {
     x.second->foffset = i;
     if (x.second->literal.size()) {
-      PyTuple_SET_ITEM(inputs.borrow(),i++,cxx->literal_to_python(x.second));
+      auto p = cxx->literal_to_python(x.second);
+      if (!p) return nullptr;
+      PyTuple_SET_ITEM(inputs.borrow(),i++,p);
       if (PyErr_Occurred()) return nullptr;
     } else if (argpos == lastpos) {
       return PyErr_Format(PyExc_TypeError,"not all inputs were set");
@@ -218,7 +233,9 @@ PyObject* module::interpret_graph(PyObject* self, PyObject* interpreter, PyObjec
   PyOwned result(PyTuple_New(G->inputs.size()));
   ssize_t n = 0;
   for(auto port:G->inputs) {
-    PyTuple_SET_ITEM(result.borrow(),n++,inport_value(port.second,frame.borrow()));
+    PyObject* x = inport_value(port.second,frame.borrow());
+    if (!x) return nullptr;
+    PyTuple_SET_ITEM(result.borrow(),n++,x);
   }
   return result.incref();
 }
@@ -434,11 +451,16 @@ PyObject* module::get_if1(PyObject* self,void*) {
   // Do the functions first so that any new types get generated first
   PyObject* /*owned*/ functions = PyString_FromString("");
   if (!functions) return nullptr;
-  for(ssize_t i=0; i<PyList_GET_SIZE(cxx->functions.borrow()); ++i) {
+  ssize_t nfunctions = PyList_GET_SIZE(cxx->functions.borrow());
+  for(ssize_t i=0; i<nfunctions; ++i) {
     PyObject* /*owned*/ if1 = PyObject_GetAttrString(PyList_GET_ITEM(cxx->functions.borrow(),i),"if1");
     if (!if1) return nullptr;
     PyString_ConcatAndDel(&functions,if1);
     if (!functions) return nullptr;
+    if (i != nfunctions-1) {
+      PyString_Concat(&functions,NEWLINE);
+      if (!functions) return nullptr;
+    }
   }
   PyOwned suffix(functions);  // functions now borrowed
 

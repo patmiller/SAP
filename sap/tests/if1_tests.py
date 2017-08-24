@@ -1045,3 +1045,25 @@ E 0 2 1 2 4''')
                          (-1,))
 
         return
+
+    def test_function_literal(self):
+        from sap.interpreter import Interpreter
+        m = sap.if1.Module()
+        
+        # Simplest function to call
+        three = m.addfunction("three")
+        for x in []: print x
+        three(1) << 3
+        self.assertEquals(m.interpret(Interpreter(),three),(3,))
+
+        # The main function just calls the simple one
+        main = m.addfunction("main")
+
+        n = main.addnode(m.IFCall)
+        n(1) << three
+        n[1] = m.integer
+
+        main(1) << n[1]
+
+        self.assertEquals(m.interpret(Interpreter(),main),(3,))
+        return
