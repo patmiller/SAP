@@ -231,9 +231,11 @@ PyObject* inport::lshift(PyObject* self, PyObject* other) {
   // Some kind of literal?
   else if ( other == Py_True ) {
     flavor = BOOLEAN_LITERAL;
+    literal = "True";
     T = lookup("boolean");
   } else if ( other == Py_False ) {
     flavor = BOOLEAN_LITERAL;
+    literal = "False";
     T = lookup("boolean");
   } else if ( PyInt_Check(other) ) {
     PyOwned s(PyObject_Str(other));

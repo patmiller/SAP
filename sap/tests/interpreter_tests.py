@@ -15,8 +15,65 @@ class TestInterpreter(unittest.TestCase):
         raise NotImplementedError("IFLoopB")
     def disabled_test_IFIfThenElse(self):
         raise NotImplementedError("IFIfThenElse")
-    def disabled_test_IFIterate(self):
-        raise NotImplementedError("IFIterate")
+    def test_IFIterate(self):
+        # main(integer n)
+        #   i = 0
+        #   sum = 0
+        #   while i < n:
+        #      i = old i + 1
+        #      sum = old sum + i
+        #      yield sum
+        #   return sum
+        m = Module()
+        main = m.addfunction("main")
+        main[1] = m.integer
+
+        test = main.addnode(m.IFLess)  # i < n
+        test[1] = m.boolean
+        test(1) << 0  # i
+        test(2) << main[1] # n
+        
+        it = main.addnode(m.IFIterate)
+        it(1) << test[1] # test
+        it(2) << 0       # i
+        it(3) << main[1] # n
+        it(4) << 0       # sum
+
+        it[1] = m.boolean # test
+        it[2] = m.integer # i
+        it[3] = m.integer # n
+        it[4] = m.integer # sum
+
+
+        g = it.addgraph()
+        g[1] = m.boolean  # old test
+        g[2] = m.integer  # old i
+        g[3] = m.integer  # old n
+        g[4] = m.integer  # old sum
+
+        plus_i = g.addnode(m.IFPlus) # new i = old i + 1
+        plus_i(1) << g[2] # old i
+        plus_i(2) << 1    # 1
+        plus_i[1] = m.integer # new i
+
+        plus_sum = g.addnode(m.IFPlus) # new sum = old sum + i
+        plus_sum(1) << g[4] # old sum
+        plus_sum(2) << plus_i[1] # i
+        plus_sum[1] = m.integer
+
+        lt = g.addnode(m.IFLess) # new test = new i < n
+        lt(1) << plus_i[1]
+        lt(2) << g[3]
+        lt[1] = m.boolean
+
+        g(1) << lt[1]       # new test
+        g(2) << plus_i[1]   # new i
+        g(4) << plus_sum[1] # new sum
+
+        main(1) << it[4]
+        self.assertEquals(m.interpret(Interpreter(),main,10),(55,))
+        return
+
     def disabled_test_IFWhileLoop(self):
         raise NotImplementedError("IFWhileLoop")
     def disabled_test_IFRepeatLoop(self):

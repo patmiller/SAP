@@ -1135,3 +1135,59 @@ E 0 2 1 2 4''')
         self.assertEquals(m.interpret(Interpreter(),main),(70,1200))
 
         return
+
+    def test_different_literal_values_in_interpreter(self):
+        from sap.interpreter import Interpreter
+        m = sap.if1.Module()
+
+        main = m.addfunction("main")
+
+        expects = ()
+        # boolean
+        main(1) << True
+        main(2) << False
+        main(3) << "true"
+        main(4) << "False"
+        expects += (True,False,True,False)
+
+        # character
+        main(5) << "'c'"
+        main(6) << r"'\n'"
+        expects += ('c','\n')
+
+        # doublereal
+        main(7) << 1234.5
+        main(8) << "1234.5"
+        main(9) << "1234.5d"
+        main(10) << "12345d-1"
+        main(11) << "12345d1"
+        main(12) << "12345d+2"
+        expects += (1234.5,1234.5,1234.5,1234.5,123450.,1234500.)
+
+        # integer
+        main(13) << 1
+        main(14) << -2
+        main(15) << (2**62)
+        main(16) << "123"
+        main(17) << "-123"
+        expects += (1,-2,2**62,123,-123)
+
+        # null
+        main(18) << "nil"
+        expects += (None,)
+
+        # real
+        main(19) << "1234.5"
+        main(20) << "1234.5e"
+        main(21) << "12345e-1"
+        main(22) << "12345e1"
+        main(23) << "12345e+2"
+        expects += (1234.5,1234.5,1234.5,123450,1234500)
+
+        # string
+        main(24) << '"hello"'
+        main(25) << r'"good\nbye"'
+        expects += ('hello','good\nbye')
+
+        self.assertEquals(m.interpret(Interpreter(),main),expects)
+        return

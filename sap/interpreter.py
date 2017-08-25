@@ -13,7 +13,17 @@ class Interpreter(object):
         else:
             g = n.children[1]
         return m.interpret(self,g,*args) 
-    def IFIterate(self,m,n,*args): raise NotImplementedError("IFIterate")
+    def IFIterate(self,m,n,*args):
+        values = list(args)
+        while values and values[0]:
+            body = n.children[0]
+            iteration = m.interpret(self,body,*values)
+
+            # update the values with whatever the graph actually generates
+            # if we don't have an input edge, it is a "loop carried" value
+            for input,v in zip(body.inputs,iteration):
+                values[input.port-1] = v
+        return tuple(values)
     def IFWhileLoop(self,m,n,*args): raise NotImplementedError("IFWhileLoop")
     def IFRepeatLoop(self,m,n,*args): raise NotImplementedError("IFRepeatLoop")
     def IFSeqForall(self,m,n,*args): raise NotImplementedError("IFSeqForall")
@@ -37,7 +47,7 @@ class Interpreter(object):
     def IFASize(self,m,n,*args): raise NotImplementedError("IFASize")
     def IFAbs(self,m,n,a): return abs(a)
     def IFBindArguments(self,m,n,*args): raise NotImplementedError("IFBindArguments")
-    def IFBool(self,m,n,a): return a == True
+    def IFBool(self,m,n,a): return not not a
     def IFCall(self,m,n,*args):
         f = args[0]
         return m.interpret(self,f,*args[1:])
@@ -63,7 +73,6 @@ class Interpreter(object):
     def IFMod(self,m,n,a,b): return a%b
     def IFNeg(self,m,n,a): return -a
     def IFNoOp(self,m,n,*args):
-        if len(args) == 1: return args[0]
         return args
     def IFNot(self,m,n,a): return not a
     def IFNotEqual(self,m,n,a,b): return a != b

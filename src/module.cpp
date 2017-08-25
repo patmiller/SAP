@@ -13,23 +13,55 @@ void module::setup() {
 }
 
 PyObject* module::literal_to_python(std::shared_ptr<inport> const &p) {
+  // We use this in converting some strings to Python values
+  static PyObject* literal_eval = nullptr;
+  if (!literal_eval) {
+    PyOwned ast(PyImport_ImportModule("ast"));
+    if (!ast) return nullptr;
+    literal_eval = PyObject_GetAttrString(ast.borrow(),"literal_eval");
+    if (!literal_eval) return nullptr;
+  }
+
   auto T = p->weakliteral_type.lock();
   if (!T) return DISCONNECTED;
   switch(T->code) {
   case IF_Array: {
     // Check subtype as char
-    return TODO("string literal");
+    auto subtype = T->parameter1.lock();
+    if (!subtype) return DISCONNECTED;
+    if (subtype->code == IF_Basic && subtype->aux == IF_Character) {
+      return PyObject_CallFunction(literal_eval,(char*)"s",p->literal.c_str());
+    }
+    return PyErr_Format(PyExc_RuntimeError,"Invalid array literal subtype: %s",p->literal.c_str());
   }
   case IF_Basic: {
     switch(T->aux) {
-    case IF_Boolean: return TODO("Boolean");
-    case IF_Character: return TODO("Character");
-    case IF_DoubleReal: return TODO("DoubleReal");
+    case IF_Boolean: {
+      if (p->literal.size() && (p->literal[0] == 't' || p->literal[0] == 'T')) {
+	Py_INCREF(Py_True);
+	return Py_True;
+      }
+      Py_INCREF(Py_False);
+      return Py_False;
+    }
+    case IF_Character: {
+      return PyObject_CallFunction(literal_eval,(char*)"s",p->literal.c_str());
+    }
+    case IF_DoubleReal: {
+      std::string copy = p->literal;
+      auto i = copy.find('d');
+      if (i != std::string::npos) copy[i] = 'e';
+      i = copy.find('D');
+      if (i != std::string::npos) copy[i] = 'e';
+
+      auto v = ::atof(copy.c_str());
+      return PyFloat_FromDouble(v);
+    }
     case IF_Integer: {
       auto v = ::atol(p->literal.c_str());
       return PyInt_FromLong(v);
     }
-    case IF_Null: return TODO("Null");
+    case IF_Null: Py_RETURN_NONE;
     case IF_Real: {
       auto v = ::atof(p->literal.c_str());
       return PyFloat_FromDouble(v);
