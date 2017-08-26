@@ -67,7 +67,7 @@ def f(x,y):
 
 ![dataflow graph](./dataflow.png  "dataflow")
 
-The dataflow dependencies show us that we can do the + and - in parallel.  The single assignment names (x, y, a, b) refer to edges in the graph (the un-named output from the return is also an edge).  We set the types of the inputs, but we can infer the types of the outputs (here, all edges are of type integer).   We can also infer the lifetimes of objects.  It's very handy!
+The dataflow dependencies show us that we can do the + and * in parallel.  The single assignment names (x, y, a, b) refer to edges in the graph (the un-named output from the return is also an edge).  We set the types of the inputs, but we can infer the types of the outputs (here, all edges are of type integer).   We can also infer the lifetimes of objects.  It's very handy!
 
 # So what about loops?
 Loops have an issue with names.  We have a loop body that has a set of names in it.  In single assignment Python, we write loop bodies this way:
