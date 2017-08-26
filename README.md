@@ -61,8 +61,8 @@ I want to think of programs as acyclic graphs.  These graphs have nice propertie
 @SAP(SAP.integer,SAP.integer)
 def f(x,y):
     a = x + y
-    b = x - y
-    return a*b
+    b = x * y
+    return a-b
 ~~~
 
 ![dataflow graph](./dataflow.png  "dataflow")
