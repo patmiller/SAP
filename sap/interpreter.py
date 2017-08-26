@@ -47,17 +47,24 @@ class Interpreter(object):
     def IFASize(self,m,n,*args): raise NotImplementedError("IFASize")
     def IFAbs(self,m,n,a): return abs(a)
     def IFBindArguments(self,m,n,*args): raise NotImplementedError("IFBindArguments")
-    def IFBool(self,m,n,a): return not not a
+    def IFBool(self,m,n,a):
+        if a == '\0': return False
+        return bool(a)
     def IFCall(self,m,n,*args):
         f = args[0]
         return m.interpret(self,f,*args[1:])
-    def IFChar(self,m,n,a): return chr(a)
-    def IFDiv(self,m,n,a,b): return a/b
+    def IFChar(self,m,n,a):
+        if isinstance(a,str): return a
+        return chr(a)
+    def IFDiv(self,m,n,a,b):
+        if isinstance(a,bool) or isinstance(b,bool):
+            return a and b
+        return a/b
     def IFDouble(self,m,n,a):
         import numpy
         return numpy.float64(a)
     def IFEqual(self,m,n,a,b): return a == b
-    def IFExp(self,m,n,*args): raise NotImplementedError("IFExp")
+    def IFExp(self,m,n,a,b): return float(a**b)
     def IFFirstValue(self,m,n,*args): raise NotImplementedError("IFFirstValue")
     def IFFinalValue(self,m,n,*args): raise NotImplementedError("IFFinalValue")
     def IFFloor(self,m,n,a): return math.floor(a)
@@ -67,16 +74,22 @@ class Interpreter(object):
     def IFLessEqual(self,m,n,a,b): return a <= b
     def IFGreat(self,m,n,a,b): return a > b
     def IFGreatEqual(self,m,n,a,b): return a >= b
-    def IFMax(self,m,n,*args): raise NotImplementedError("IFMax")
-    def IFMin(self,m,n,*args): raise NotImplementedError("IFMin")
-    def IFMinus(self,m,n,a,b): return a-b
+    def IFMax(self,m,n,a,b): return max(a,b)
+    def IFMin(self,m,n,a,b): return min(a,b)
+    def IFMinus(self,m,n,a,b):
+        if isinstance(a,bool) or isinstance(b,bool):
+            return a or b
+        return a-b
     def IFMod(self,m,n,a,b): return a%b
     def IFNeg(self,m,n,a): return -a
     def IFNoOp(self,m,n,*args):
         return args
     def IFNot(self,m,n,a): return not a
     def IFNotEqual(self,m,n,a,b): return a != b
-    def IFPlus(self,m,n,a,b): return a+b
+    def IFPlus(self,m,n,a,b):
+        if isinstance(a,bool) or isinstance(b,bool):
+            return a or b
+        return a+b
     def IFRangeGenerate(self,m,n,*args): raise NotImplementedError("IFRangeGenerate")
     def IFRBuild(self,m,n,*args): raise NotImplementedError("IFRBuild")
     def IFRElements(self,m,n,*args): raise NotImplementedError("IFRElements")
@@ -89,7 +102,10 @@ class Interpreter(object):
     def IFSingle(self,m,n,a):
         import numpy
         return numpy.float32(a)
-    def IFTimes(self,m,n,a,b): return a*b
+    def IFTimes(self,m,n,a,b):
+        if isinstance(a,bool) or isinstance(b,bool):
+            return a and b
+        return a*b
     def IFTrunc(self,m,n,a): return math.trunc(a)
     def IFPrefixSize(self,m,n,*args): raise NotImplementedError("IFPrefixSize")
     def IFError(self,m,n,*args): raise NotImplementedError("IFError")
@@ -99,3 +115,9 @@ class Interpreter(object):
     def IFAElementN(self,m,n,*args): raise NotImplementedError("IFAElementN")
     def IFAElementP(self,m,n,*args): raise NotImplementedError("IFAElementP")
     def IFAElementM(self,m,n,*args): raise NotImplementedError("IFAElementM")
+
+    def IFGreat(self,m,n,a,b): return a > b
+    def IFGreatEqual(self,m,n,a,b): return a >= b
+    def IFAnd(self,m,n,a,b): return a and b
+    def IFOr(self,m,n,a,b): return a or b
+
