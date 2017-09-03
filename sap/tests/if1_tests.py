@@ -920,7 +920,7 @@ E 0 2 1 2 4''')
 
     def test_interpret_node(self):
         class I(object):
-            def IFPlus(self,m,n,a,b): return a+b
+            def IFPlus(self, m, n, a, b): return a + b
 
         m = sap.if1.Module()
         f = m.addfunction("f")
@@ -933,24 +933,26 @@ E 0 2 1 2 4''')
         v = m.interpret(I(), N, 3, 4)
         self.assertEqual(v, (7,))
         return
-            
+
     def test_interpret_litgraph(self):
         class I(object):
-            def IFPlus(self,m,n,a,b): return a+b
-            def IFTimes(self,m,n,a,b): return a*b
+            def IFPlus(self, m, n, a, b): return a + b
+
+            def IFTimes(self, m, n, a, b): return a * b
 
         m = sap.if1.Module()
         f = m.addfunction("f")
 
         f(1) << 3
-        v = m.interpret(I(),f)
-        self.assertEqual(v,(3,))
+        v = m.interpret(I(), f)
+        self.assertEqual(v, (3,))
         return
-            
+
     def test_interpret_graph(self):
         class I(object):
-            def IFPlus(self,m,n,a,b): return a+b
-            def IFTimes(self,m,n,a,b): return a*b
+            def IFPlus(self, m, n, a, b): return a + b
+
+            def IFTimes(self, m, n, a, b): return a * b
 
         m = sap.if1.Module()
         f = m.addfunction("f")
@@ -967,14 +969,15 @@ E 0 2 1 2 4''')
         T[1] = m.integer
 
         f(1) << T[1]
-        v = m.interpret(I(),f,3,4)
-        self.assertEqual(v,(70,))
+        v = m.interpret(I(), f, 3, 4)
+        self.assertEqual(v, (70,))
         return
 
     def test_interpret_graph2(self):
         class I(object):
-            def IFPlus(self,m,n,a,b): return a+b
-            def IFTimes(self,m,n,a,b): return a*b
+            def IFPlus(self, m, n, a, b): return a + b
+
+            def IFTimes(self, m, n, a, b): return a * b
 
         m = sap.if1.Module()
         f = m.addfunction("f")
@@ -992,21 +995,23 @@ E 0 2 1 2 4''')
 
         f(1) << T[1]
         f(2) << P[1]
-        v = m.interpret(I(),f,3,4)
-        self.assertEqual(v,(70,7))
+        v = m.interpret(I(), f, 3, 4)
+        self.assertEqual(v, (70, 7))
         return
 
     def test_interpret_compound(self):
         class I(object):
-            def IFPlus(self,m,n,a,b): return a+b
-            def IFMinus(self,m,n,a,b): return a-b
-            def IFIfThenElse(self,m,n,*args):
+            def IFPlus(self, m, n, a, b): return a + b
+
+            def IFMinus(self, m, n, a, b): return a - b
+
+            def IFIfThenElse(self, m, n, *args):
                 assert args
                 if args[0]:
                     g = n.children[0]
                 else:
                     g = n.children[1]
-                return m.interpret(self,g,*args) 
+                return m.interpret(self, g, *args)
 
         m = sap.if1.Module()
         f = m.addfunction("f")
@@ -1039,9 +1044,9 @@ E 0 2 1 2 4''')
 
         f(1) << T[1]
 
-        self.assertEqual(m.interpret(I(),f,True,3,4),
+        self.assertEqual(m.interpret(I(), f, True, 3, 4),
                          (7,))
-        self.assertEqual(m.interpret(I(),f,False,3,4),
+        self.assertEqual(m.interpret(I(), f, False, 3, 4),
                          (-1,))
 
         return
@@ -1049,11 +1054,11 @@ E 0 2 1 2 4''')
     def test_function_literal(self):
         from sap.interpreter import Interpreter
         m = sap.if1.Module()
-        
+
         # Simplest function to call
         three = m.addfunction("three")
         three(1) << 3
-        self.assertEquals(m.interpret(Interpreter(),three),(3,))
+        self.assertEquals(m.interpret(Interpreter(), three), (3,))
 
         # The main function just calls the simple one
         main = m.addfunction("main")
@@ -1064,14 +1069,14 @@ E 0 2 1 2 4''')
 
         main(1) << n[1]
 
-        self.assertEquals(m.interpret(Interpreter(),main),(3,))
+        self.assertEquals(m.interpret(Interpreter(), main), (3,))
 
         return
 
     def test_function_literal_with_args(self):
         from sap.interpreter import Interpreter
         m = sap.if1.Module()
-        
+
         # function of two args that returns one
         f = m.addfunction("f")
         f[1] = f[2] = m.integer
@@ -1081,7 +1086,7 @@ E 0 2 1 2 4''')
         n(2) << f[2]
 
         f(1) << n[1]
-        self.assertEquals(m.interpret(Interpreter(),f,3,4),(7,))
+        self.assertEquals(m.interpret(Interpreter(), f, 3, 4), (7,))
 
         # The main function just calls the simple one
         main = m.addfunction("main")
@@ -1094,14 +1099,14 @@ E 0 2 1 2 4''')
 
         main(1) << n[1]
 
-        self.assertEquals(m.interpret(Interpreter(),main),(70,))
+        self.assertEquals(m.interpret(Interpreter(), main), (70,))
 
         return
 
     def test_function_literal_with_args_and_multireturn(self):
         from sap.interpreter import Interpreter
         m = sap.if1.Module()
-        
+
         # function of two args that returns one
         f = m.addfunction("f")
         f[1] = f[2] = m.integer
@@ -1118,7 +1123,7 @@ E 0 2 1 2 4''')
 
         f(1) << p[1]
         f(2) << t[1]
-        self.assertEquals(m.interpret(Interpreter(),f,3,4),(7,12))
+        self.assertEquals(m.interpret(Interpreter(), f, 3, 4), (7, 12))
 
         # The main function just calls the simple one
         main = m.addfunction("main")
@@ -1132,7 +1137,7 @@ E 0 2 1 2 4''')
         main(1) << n[1]
         main(2) << n[2]
 
-        self.assertEquals(m.interpret(Interpreter(),main),(70,1200))
+        self.assertEquals(m.interpret(Interpreter(), main), (70, 1200))
 
         return
 
@@ -1148,12 +1153,12 @@ E 0 2 1 2 4''')
         main(2) << False
         main(3) << "true"
         main(4) << "False"
-        expects += (True,False,True,False)
+        expects += (True, False, True, False)
 
         # character
         main(5) << "'c'"
         main(6) << r"'\n'"
-        expects += ('c','\n')
+        expects += ('c', '\n')
 
         # doublereal
         main(7) << 1234.5
@@ -1162,7 +1167,7 @@ E 0 2 1 2 4''')
         main(10) << "12345d-1"
         main(11) << "12345d1"
         main(12) << "12345d+2"
-        expects += (1234.5,1234.5,1234.5,1234.5,123450.,1234500.)
+        expects += (1234.5, 1234.5, 1234.5, 1234.5, 123450., 1234500.)
 
         # integer
         main(13) << 1
@@ -1170,7 +1175,7 @@ E 0 2 1 2 4''')
         main(15) << (2**62)
         main(16) << "123"
         main(17) << "-123"
-        expects += (1,-2,2**62,123,-123)
+        expects += (1, -2, 2**62, 123, -123)
 
         # null
         main(18) << "nil"
@@ -1182,12 +1187,12 @@ E 0 2 1 2 4''')
         main(21) << "12345e-1"
         main(22) << "12345e1"
         main(23) << "12345e+2"
-        expects += (1234.5,1234.5,1234.5,123450,1234500)
+        expects += (1234.5, 1234.5, 1234.5, 123450, 1234500)
 
         # string
         main(24) << '"hello"'
         main(25) << r'"good\nbye"'
-        expects += ('hello','good\nbye')
+        expects += ('hello', 'good\nbye')
 
-        self.assertEquals(m.interpret(Interpreter(),main),expects)
+        self.assertEquals(m.interpret(Interpreter(), main), expects)
         return

@@ -3,6 +3,7 @@ import ast
 import sap.if1
 import sap.compiler_base
 
+
 class CompilerExpression(sap.compiler_base.CompilerBase):
     def __init__(self):
         sap.compiler_base.CompilerBase.__init__(self)
@@ -17,7 +18,8 @@ class CompilerExpression(sap.compiler_base.CompilerBase):
 
     def NameConstant(self, node):
         if node.value is None:
-            self.error.not_supported_error('None is not a supported NameConstant')
+            self.error.not_supported_error(
+                'None is not a supported NameConstant')
         return (node.value,)
 
     def Name(self, node):
