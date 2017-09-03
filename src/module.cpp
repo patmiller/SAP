@@ -299,11 +299,46 @@ PyObject* module::interpret(PyObject* self,PyObject* args) {
   return PyErr_Format(PyExc_ValueError,"2nd arg must be a node or graph");
 }
 
+PyObject* module::type_of_value(PyObject* self,PyObject* v) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  STATIC_STR(BOOLEAN,"boolean");
+  STATIC_STR(INTEGER,"integer");
+  STATIC_STR(DOUBLEREAL,"doublereal");
+  STATIC_STR(STRING,"string");
+
+  if (PyObject_TypeCheck(v,&outport::Type)) {
+    return outport::get_type(v,nullptr);
+  }
+
+  else if (PyBool_Check(v)) {
+    PyObject* T = PyDict_GetItem(cxx->dict.borrow(),BOOLEAN);
+    if (T) { Py_INCREF(T); return T; }
+  }
+    
+  else if (PyInt_Check(v)) {
+    PyObject* T = PyDict_GetItem(cxx->dict.borrow(),INTEGER);
+    if (T) { Py_INCREF(T); return T; }
+  }
+
+  else if (PyFloat_Check(v)) {
+    PyObject* T = PyDict_GetItem(cxx->dict.borrow(),DOUBLEREAL);
+    if (T) { Py_INCREF(T); return T; }
+  }
+
+  else if (PyString_Check(v)) {
+    PyObject* T = PyDict_GetItem(cxx->dict.borrow(),STRING);
+    if (T) { Py_INCREF(T); return T; }
+  }
+  
+  return PyErr_Format(PyExc_RuntimeError,"Could not determine the type");
+}
+
 PyMethodDef module::methods[] = {
   {(char*)"interpret",module::interpret,METH_VARARGS,"interpret a node or function using an interpreter object"},
   {(char*)"addtype",(PyCFunction)module::addtype,METH_VARARGS|METH_KEYWORDS,"add a type"},
-    {(char*)"addtypechain",(PyCFunction)module::addtypechain,METH_VARARGS|METH_KEYWORDS,"create a type chain (tuple, tags, fields)"},
+  {(char*)"addtypechain",(PyCFunction)module::addtypechain,METH_VARARGS|METH_KEYWORDS,"create a type chain (tuple, tags, fields)"},
   {(char*)"addfunction",module::addfunction,METH_VARARGS,"add a new function"},
+  {(char*)"type_of_value",module::type_of_value,METH_O,"determine type of a value"},
   {nullptr}
 };
 

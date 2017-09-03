@@ -54,8 +54,99 @@ class TestInterpreter(unittest.TestCase):
         raise NotImplementedError("IFLoopA")
     def disabled_test_IFLoopB(self):
         raise NotImplementedError("IFLoopB")
-    def disabled_test_IFIfThenElse(self):
-        raise NotImplementedError("IFIfThenElse")
+
+    def test_IFIfThenElse(self):
+        m = Module()
+        main = m.addfunction("main")
+        main[1] = m.integer
+        main[2] = m.integer
+
+        ifthen = main.addnode(m.IFIfThenElse)
+        ifthen(1) << main[1]
+        ifthen(2) << main[2]
+
+        # Build subgraphs for 3 tests, 3 bodies, and 1 else clause
+        T0 = ifthen.addgraph()
+        T0[1] = m.integer
+        T0[2] = m.integer
+        B0 = ifthen.addgraph()
+        B0[1] = m.integer
+        B0[2] = m.integer
+
+        T1 = ifthen.addgraph()
+        T1[1] = m.integer
+        T1[2] = m.integer
+        B1 = ifthen.addgraph()
+        B1[1] = m.integer
+        B1[2] = m.integer
+
+        T2 = ifthen.addgraph()
+        T2[1] = m.integer
+        T2[2] = m.integer
+        B2 = ifthen.addgraph()
+        B2[1] = m.integer
+        B2[2] = m.integer
+
+        E = ifthen.addgraph()
+        E[1] = m.integer
+        E[2] = m.integer
+
+        # Test 0 is a+b < 100 -> 1234
+        p = T0.addnode(m.IFPlus)
+        p(1) << T0[1]
+        p(2) << T0[2]
+        p[1] = m.integer
+
+        t = T0.addnode(m.IFLess)
+        t(1) << p[1]
+        t(2) << 100
+        t[1] = m.boolean
+        T0(1) << t[1]
+
+        B0(1) << 1234
+
+        # Test 1 is a-b < 100 -> 4321
+        p = T1.addnode(m.IFMinus)
+        p(1) << T1[1]
+        p(2) << T1[2]
+        p[1] = m.integer
+
+        t = T1.addnode(m.IFLess)
+        t(1) << p[1]
+        t(2) << 100
+        t[1] = m.boolean
+        T1(1) << t[1]
+
+        B1(1) << 4321
+
+        # Test 2 is a*b < 100 -> 10000
+        p = T2.addnode(m.IFTimes)
+        p(1) << T2[1]
+        p(2) << T2[2]
+        p[1] = m.integer
+
+        t = T2.addnode(m.IFLess)
+        t(1) << p[1]
+        t(2) << 100
+        t[1] = m.boolean
+        T2(1) << t[1]
+
+        B2(1) << 9999
+
+        # Else clause returns -1
+        E(1) << -1
+
+
+        # We take the final results out of port 1
+        ifthen[1] = m.integer
+        main(1) << ifthen[1]
+
+        self.assertEquals(m.interpret(self.INTERPRETER,main,10,20),(1234,))
+        self.assertEquals(m.interpret(self.INTERPRETER,main,1000,950),(4321,))
+        self.assertEquals(m.interpret(self.INTERPRETER,main,1000,0),(9999,))
+        self.assertEquals(m.interpret(self.INTERPRETER,main,1000,10),(-1,))
+        return
+
     def test_IFIterate(self):
         # main(integer n)
         #   i = 0

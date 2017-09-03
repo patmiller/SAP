@@ -33,6 +33,7 @@ class module : public IF1<module> {
   static PyObject* addtype(PyObject*,PyObject*,PyObject*);
   static PyObject* addtypechain(PyObject*,PyObject*,PyObject*);
   static PyObject* addfunction(PyObject*,PyObject*);
+  static PyObject* type_of_value(PyObject*,PyObject*);
 
   static PyObject* get_if1(PyObject*,void*);
   static PyObject* get_types(PyObject*,void*);
