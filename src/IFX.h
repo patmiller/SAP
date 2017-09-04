@@ -356,6 +356,9 @@ enum IF1Opcodes {
   IFAnd = 202,
   IFOr = 203,
 
+  // Some IF2 nodes are handy
+  IFPeek = 314,
+
   IFSGraph = 1000,
   IFLGraph = 1001,
   IFIGraph = 1002,

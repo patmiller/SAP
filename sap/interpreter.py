@@ -1,6 +1,5 @@
 import math
 
-
 class Interpreter(object):
     def IFForall(self,m,n,*args): raise NotImplementedError("IFForall")
     def IFSelect(self,m,n,*args): raise NotImplementedError("IFSelect")
@@ -203,3 +202,8 @@ class Interpreter(object):
         for x in args:
             if x: return (True,)
         return (False,)
+    def IFPeek(self,m,n,*args):
+        import sys
+        for v in args:
+            sys.stdout.write(str(v))
+        return ()

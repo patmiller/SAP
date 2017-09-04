@@ -139,6 +139,8 @@ initif1(void) {
 
   PyDict_SetItemString(DEFAULT_OPCODES,"IFAnd",PyInt_FromLong(IFAnd)); if (PyErr_Occurred()) return;
   PyDict_SetItemString(DEFAULT_OPCODES,"IFOr",PyInt_FromLong(IFOr)); if (PyErr_Occurred()) return;
+
+  PyDict_SetItemString(DEFAULT_OPCODES,"IFPeek",PyInt_FromLong(IFPeek)); if (PyErr_Occurred()) return;
   
   PyDict_SetItemString(DEFAULT_OPCODES,"IFSGraph",PyInt_FromLong(IFSGraph)); if (PyErr_Occurred()) return;
   PyDict_SetItemString(DEFAULT_OPCODES,"IFLGraph",PyInt_FromLong(IFLGraph)); if (PyErr_Occurred()) return;
