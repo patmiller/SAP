@@ -123,12 +123,10 @@ class CompilerExpression(sap.compiler_base.CompilerBase):
         return self.graphs[-1].addnode(self.m.IFLessEqual)
 
     def Gt(self, node):
-        self.default(node)
-        return
+        return self.graphs[-1].addnode(self.m.IFGreat)
 
     def GtE(self, node):
-        self.default(node)
-        return
+        return self.graphs[-1].addnode(self.m.IFGreatEqual)
 
     def Is(self, node):
         self.default(node)
