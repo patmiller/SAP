@@ -7,17 +7,9 @@ class Interpreter(object):
     def IFLoopA(self,m,n,*args): raise NotImplementedError("IFLoopA")
     def IFLoopB(self,m,n,*args): raise NotImplementedError("IFLoopB")
     def IFIfThenElse(self,m,n,*args):
-        # The form is T:B T:B T:B ... E
-        ngraphs = len(n.children)
-        for i in range(0,ngraphs-1,2):
-            T = n.children[i]
-            B = n.children[i+1]
-            
-            flag = m.interpret(self,T,*args)
-            assert len(flag) == 1
-            if flag[0]:
-                return m.interpret(self,B,*args)
-        return m.interpret(self,n.children[-1],*args)
+        assert args
+        g = n.children[0] if args[0] else n.children[1]
+        return m.interpret(self,g,*args)
     def IFIterate(self,m,n,*args):
         values = list(args)
         while values and values[0]:

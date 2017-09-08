@@ -66,90 +66,46 @@ class TestInterpreter(unittest.TestCase):
         main[1] = m.integer
         main[2] = m.integer
 
+        lt = main.addnode(m.IFLess)
+        lt(1) << main[1]
+        lt(2) << main[2]
+        lt[1] = m.boolean
+
+        
         ifthen = main.addnode(m.IFIfThenElse)
-        ifthen(1) << main[1]
-        ifthen(2) << main[2]
+        ifthen(1) << lt[1]
+        ifthen(2) << main[1]
+        ifthen(3) << main[2]
 
-        # Build subgraphs for 3 tests, 3 bodies, and 1 else clause
-        T0 = ifthen.addgraph()
-        T0[1] = m.integer
-        T0[2] = m.integer
-        B0 = ifthen.addgraph()
-        B0[1] = m.integer
-        B0[2] = m.integer
+        # Build subgraph for true part (if a<b -> a+b)
+        T = ifthen.addgraph()
+        T[1] = m.boolean
+        T[2] = m.integer
+        T[3] = m.integer
+        plus = T.addnode(m.IFPlus)
+        plus(1) << T[2]
+        plus(2) << T[3]
+        plus[1] = m.integer
+        T(1) << plus[1]
 
-        T1 = ifthen.addgraph()
-        T1[1] = m.integer
-        T1[2] = m.integer
-        B1 = ifthen.addgraph()
-        B1[1] = m.integer
-        B1[2] = m.integer
-
-        T2 = ifthen.addgraph()
-        T2[1] = m.integer
-        T2[2] = m.integer
-        B2 = ifthen.addgraph()
-        B2[1] = m.integer
-        B2[2] = m.integer
-
+        # Build subgraph for false part (if NOT a<b -> a-b)
         E = ifthen.addgraph()
-        E[1] = m.integer
+        E[1] = m.boolean
         E[2] = m.integer
-
-        # Test 0 is a+b < 100 -> 1234
-        p = T0.addnode(m.IFPlus)
-        p(1) << T0[1]
-        p(2) << T0[2]
-        p[1] = m.integer
-
-        t = T0.addnode(m.IFLess)
-        t(1) << p[1]
-        t(2) << 100
-        t[1] = m.boolean
-        T0(1) << t[1]
-
-        B0(1) << 1234
-
-        # Test 1 is a-b < 100 -> 4321
-        p = T1.addnode(m.IFMinus)
-        p(1) << T1[1]
-        p(2) << T1[2]
-        p[1] = m.integer
-
-        t = T1.addnode(m.IFLess)
-        t(1) << p[1]
-        t(2) << 100
-        t[1] = m.boolean
-        T1(1) << t[1]
-
-        B1(1) << 4321
-
-        # Test 2 is a*b < 100 -> 10000
-        p = T2.addnode(m.IFTimes)
-        p(1) << T2[1]
-        p(2) << T2[2]
-        p[1] = m.integer
-
-        t = T2.addnode(m.IFLess)
-        t(1) << p[1]
-        t(2) << 100
-        t[1] = m.boolean
-        T2(1) << t[1]
-
-        B2(1) << 9999
-
-        # Else clause returns -1
-        E(1) << -1
-
+        E[3] = m.integer
+        minus = E.addnode(m.IFMinus)
+        minus(1) << E[2]
+        minus(2) << E[3]
+        minus[1] = m.integer
+        E(1) << minus[1]
 
         # We take the final results out of port 1
         ifthen[1] = m.integer
         main(1) << ifthen[1]
 
-        self.assertEquals(m.interpret(self.INTERPRETER,main,10,20),(1234,))
-        self.assertEquals(m.interpret(self.INTERPRETER,main,1000,950),(4321,))
-        self.assertEquals(m.interpret(self.INTERPRETER,main,1000,0),(9999,))
-        self.assertEquals(m.interpret(self.INTERPRETER,main,1000,10),(-1,))
+        self.assertEquals(m.interpret(self.INTERPRETER,main,10,20),(30,))
+        self.assertEquals(m.interpret(self.INTERPRETER,main,1000,950),(50,))
+        self.assertEquals(m.interpret(self.INTERPRETER,main,1000,1000),(0,))
         return
 
     def test_IFIterate(self):
