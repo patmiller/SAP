@@ -4,8 +4,35 @@ import sys
 import types
 import sap.if1
 
+class SemanticError(Exception):
+    def __init__(self,compiler,node,format,*args):
+        lineno = getattr(node,'lineno',None)
+        if lineno is None:
+            msg = format.format(*args)
+        else:
+            msg = '\n%s:%d: %s\n%s%s'%(compiler.sourcefile,
+                                      node.lineno,
+                                      format.format(*args),
+                                      compiler.source[node.lineno-1],
+                                      node.col_offset*' '+'^')
+        super(SemanticError,self).__init__(msg)
+        return
+
+class SingleAssignment(SemanticError): pass
+class NotSupported(SemanticError): pass
+class ArityError(SemanticError): pass
+class TODO(SemanticError): pass
+class Arithmetic(SemanticError): pass
+class Unknown(SemanticError): pass
+class TypeMismatch(SemanticError): pass
+class NoEffect(SemanticError): pass
+class HigherOrderFunction(SemanticError): pass
+class UnknownName(SemanticError): pass
+class NotAFunction(SemanticError): pass
+
 class IF1Wiring(ast.NodeVisitor):
-    def __init__(self,compiler):
+    def __init__(self,function,compiler):
+        self.function = function
         self.compiler = compiler
         self.symtab = compiler.symtab
         self.reversepolish = []
@@ -19,6 +46,69 @@ class IF1Wiring(ast.NodeVisitor):
         self.real = module.real
         self.string = module.string
         return
+
+    def visit_Expr(self,node):
+        raise NoEffect(self.compiler,node,'Expression has no effect')
+
+    def visit_Call(self,node):
+        if not isinstance(node.func,ast.Name) or node.keywords or node.starargs or node.kwargs:
+            raise HigherOrderFunction(self.compiler,node,'Cannot use higher order function, named args, or a method here')
+
+        # We build the parameters we pass in first so that we can do some type checking
+        values = sum((self.visit(n) for n in node.args),())
+
+        # A node to make the call
+        call = self.symtab.context.addnode(self.module.IFCall)
+
+        # Look up the function implementation or forward
+        fname = node.func.id
+        f = self.function.func_globals.get(fname)
+        if f is None:
+            raise UnknownName(self.compiler,node.func,'Cannot find name {}',fname)
+
+        # OK, we can deal with one of two things now (and eventually a python thing)
+        if isinstance(f,sap.if1.Graph):
+            # If this is a function graph, we can directly get input and output chains
+            call(1) << f
+            ftype = f.type
+            ichain = ftype.parameter1
+            inputs =  ichain.chain() if ichain is not None else ()
+            outputs = ftype.parameter2.chain()
+        elif isinstance(f,sap.if1.Type):
+            if f.code != self.module.IF_Function:
+                raise Invalid(self.compiler,self.func,'This does not name a forwarded type')
+            call(1).set(fname,f)
+            ichain = f.parameter1
+            inputs =  ichain.chain() if ichain is not None else ()
+            outputs = f.parameter2.chain()
+        elif callable(f):
+            raise NotImplementedError('Have to do a lookup for things like abs, max, etc.. that are Python functions with well defined meanings')
+        else:
+            raise NotAFunction(self.compiler,node.func,'{} does not name a callable or a forward',fname)
+
+        # Check the input arity to make sure we are passing the correct number of inputs
+        if len(values) != len(inputs):
+            raise ArityError(self.compiler,node,'{} expected {} arguments, but got {}',fname,len(inputs),len(values))
+
+        # Check to see that the types match up
+        for i,(v,expected) in enumerate(zip(values,inputs)):
+            actual = v.type
+            if expected is not actual:
+                raise TypeMismatch(self.compiler,node.args[i],
+                                   'Argument {} expected {}, but actual was {}',
+                                   i+1,expected,actual)
+
+        # Now, at last, we can wire the inputs to the call
+        for port,arg in enumerate(values):
+            call(port+2) << arg
+
+        # Now we just use the output chain to set outports and return those values
+        results = []
+        for port,out in enumerate(outputs):
+            call[port+1] = out
+            results.append(call[port+1])
+        
+        return tuple(results)
 
     def visit_Compare(self,node):
         a = self.visit(node.left)
@@ -91,11 +181,19 @@ class IF1Wiring(ast.NodeVisitor):
             if len(names) != len(values):
                 raise ArityError(self.compiler,node,'{} names in lhs, but rhs has arity {}',len(names),len(values))
             for name,value in zip(names,values):
-                print name.id,'=',value
-                try:
-                    self.symtab[name.id] = value
-                except KeyError:
+                if name.id in self.symtab:
                     raise SingleAssignment(self.compiler,name,'Single assignment violation for {}',name.id)
+                self.symtab[name.id] = value
+            return
+        
+        if len(node.targets) == 1 and isinstance(node.targets[0],ast.Name):
+            name = node.targets[0].id
+            value = self.visit(node.value)
+            if len(value) != 1:
+                raise ArityError(self.compiler,node.value,'one value on the LHS, but {} values on the right',len(value))
+            if name in self.symtab:
+                raise SingleAssignment(self.compiler,node.targets[0],'Single assignment violation for {}',name)
+            self.symtab[name] = value[0]
             return
 
         raise TODO(self.compiler,node,'record and array update')
@@ -215,10 +313,25 @@ class IF1Wiring(ast.NodeVisitor):
         self.reversepolish.append(node)
         return self.visit(node.op)
 
+    @staticmethod
+    def compound_callback(compound,symbol,value,level):
+        # Here, we are importing something to a subgraph.  We need a new port into the compound
+        # for it and then we have to export the value on each subgraph.  Only then can we add it to this level                
+        port = len(compound.inputs)+1
+        compound(port) << value
+        for child in compound.children:
+            child[port] = value.type
+
+        return (port,value.type)
+
+    @staticmethod
+    def graph_callback(graph,symbol,port_type,level):
+        port,type = port_type
+        graph[port] = type
+        return graph[port]
+
     def visit_BoolOp(self,node):
         # Implements as a short circuit.  We can likely optimize certain variants to use IFAnd and IFOr directly
-        printAst(node)
-
         # Start with an ifthenelse graph.  Each expression clause in the values becomes a test graph
         # For AND, if we see a false value, the value of the whole shebang is false. Only true if we pass
         # all tests.  We do this by booleanizing each value and then applying a NOT
@@ -231,64 +344,75 @@ class IF1Wiring(ast.NodeVisitor):
         else:
             raise Unexpected(self.compiler,node,'Unexpected ast.BoolOp structure -- weird op value')
 
-        ifelse = self.symtab.context.addnode(self.module.IFIfThenElse)
-        ifelse[1] = self.module.boolean
-        def callback(compound,symbol,value,level):
-            # Here, we are importing something to a subgraph.  We need a new port into the compound
-            # for it and then we have to export the value on each subgraph.  Only then can we add it to this level                
-            port = len(compound.inputs)+1
-            print 'port',port,symbol,value
-            compound(port) << value
-            for child in compound.children:
-                child[port] = value.type
-
-            return (port,value.type)
-
-        with self.symtab.addlevel(ifelse,callback):
+        ifthen = self.symtab.context.addnode(self.module.IFIfThenElse)
+        ifthen[1] = self.module.boolean
+        with self.symtab.addlevel(ifthen,self.compound_callback):
             # Each value gets a test:body pair (we must booleanize the value)
             for operand in node.values:
                 # Add a test graph
-                T = ifelse.addgraph()
+                T = ifthen.addgraph()
 
                 # If we have any inputs to the ifthen, they are visible to this graph
-                for inedge in ifelse.inputs:
-                    raise NotImplemented("fix")
+                for inedge in ifthen.inputs:
+                    T[inedge.port] = inedge.type
 
                 # We add a new context with this graph
-                def graphcallback(graph,symbol,port_type,level):
-                    port,type = port_type
-                    graph[port] = type
-                    return graph[port]
-                with self.symtab.addlevel(T,graphcallback):
+                with self.symtab.addlevel(T,graph_callback):
                     v = self.visit(operand)
                     if len(v) > 1:
                         raise ArityError(self.compiler,operand,'test value has arity > 1')
                     b, = self.coerce_boolean(operand,v[0])
                     T(1) << b
-                B = ifelse.addgraph()
+                B = ifthen.addgraph()
                 B(1) << rvalue
 
         # If we didn't match, then we use !rvalue as the result (true for and, false for or)
-        E = ifelse.addgraph()
+        E = ifthen.addgraph()
         E(1) << (not rvalue)
-        return (ifelse[1],)
+        return (ifthen[1],)
 
     def visit_If(self,node):
-        # Python converts if T0: ... elif T1: ... else ... into a nested if... de-nest if possible
-        #printAst(node)
-        testbodypairs = [(node.test, node.body)]
-        elses = node.orelse
-        while len(elses) == 1 and isinstance(elses[0],ast.If):
-            testbodypairs.append((elses[0].test,elses[0].body))
-            elses = elses[0].orelse
-        for t,b in testbodypairs:
-            printAst(t)
-            print '--'
-            printAst(b)
-            print
-        print '----'
-        printAst(elses)
-        xx
+        # We generate the test in the current context (must have arity 1) and wire it to the ifthen
+        v = self.visit(node.test)
+        if len(v) != 1:
+            raise ArityError(self.compiler,node,'test expression does not have arity-1')
+
+        ifthen = self.symtab.context.addnode(self.module.IFIfThenElse)
+        ifthen(1) << v[0]
+        
+        # Visit each set of assignments, but don't wire any final values to the graph yet
+        with self.symtab.addlevel(ifthen,self.compound_callback) as compound:
+            symtabs = []
+            for stmts in (node.body,node.orelse):
+                g = ifthen.addgraph()
+                for inedge in ifthen.inputs:
+                    g[inedge.port] = inedge.type
+                with self.symtab.addlevel(g,self.graph_callback) as local:
+                    symtabs.append(local)
+                    for stmt in stmts:
+                        self.visit(stmt)
+
+        truesyms,falsesyms = symtabs
+
+        allsyms = set(self.symtab)
+        trueside = set(truesyms).difference(allsyms)
+        falseside = set(falsesyms).difference(allsyms)
+        names = sorted(trueside.intersection(falseside))
+
+        # Wire values into the bodies of the graphs
+        T,F = ifthen.children
+        for port,name in enumerate(names):
+            true_value = truesyms[name]
+            false_value = falsesyms[name]
+            T(port+1) << true_value
+            F(port+1) << false_value
+            if T(port+1).type is not F(port+1).type:
+                raise TypeMismatch(self.compiler,node,
+                                   '{} does not have consistent type on true ({}) and false ({}) sides of conditional',
+                                   name,T(port+1).type,F(port+1).type)
+            ifthen[port+1] = T(port+1).type
+            self.symtab[name] = ifthen[port+1]
+        return
 
     def visit_Print(self,node):
         peek = self.symtab.context.addnode(self.module.IFPeek)
@@ -306,27 +430,6 @@ class IF1Wiring(ast.NodeVisitor):
 
     def generic_visit(self,node):
         raise NotSupported(self.compiler,node,'Python ast node {} not supported yet',type(node).__name__)
-
-class SemanticError(Exception):
-    def __init__(self,compiler,node,format,*args):
-        lineno = getattr(node,'lineno',None)
-        if lineno is None:
-            msg = format.format(*args)
-        else:
-            msg = '\n%s:%d: %s\n%s%s'%(compiler.sourcefile,
-                                      node.lineno,
-                                      format.format(*args),
-                                      compiler.source[node.lineno-1],
-                                      node.col_offset*' '+'^')
-        super(SemanticError,self).__init__(msg)
-        return
-
-class SingleAssignment(SemanticError): pass
-class NotSupported(SemanticError): pass
-class ArityError(SemanticError): pass
-class TODO(SemanticError): pass
-class Arithmetic(SemanticError): pass
-class Unknown(SemanticError): pass
 
 
 def printAst(n, level=0, stream=sys.stdout,label=''):
@@ -381,6 +484,12 @@ class Symtab(object):
         self.marks = []
         return
 
+    def __iter__(self):
+        for n,callback,syms in reversed(self.stack):
+            for sym in syms:
+                yield sym
+        return
+
     def __exit__(self,*args):
         savepoint = self.marks.pop()
         del self.stack[savepoint-1:]
@@ -388,7 +497,7 @@ class Symtab(object):
 
     def __enter__(self):
         self.marks.append(len(self.stack))
-        return self
+        return self.stack[-1][2]
 
     def addlevel(self,n,callback):
         self.stack.append((n,callback,{}))
@@ -403,7 +512,6 @@ class Symtab(object):
         else:
             return None
         # We may have to do work to bring the value up to this level
-        if callbacks: print 'CB',callbacks
         for n,cb,level in reversed(callbacks):
             v = cb(n,key,v,level)
             level[key] = v
@@ -589,7 +697,7 @@ class DataflowGraph(object):
                 raise SemanticError(self,tree.body[-1] if tree.body else tree,'Function body must end with a return')
 
             # Generate the tree to make some values
-            visitor = IF1Wiring(self)
+            visitor = IF1Wiring(f,self)
             for node in tree.body[:-1]:
                 visitor.visit(node)
             results = visitor.visit(tree.body[-1].value)
@@ -614,11 +722,7 @@ class DataflowGraph(object):
         base = self.typeof(base)
         return self.module.addtype(self.module.IF_Multiple,base)
 
-    def forward(self,name,*args,**kwargs):
-        # name cannot already be set by another forward nor function
-        if name in self.forwards: raise KeyError("duplicate forward {}",name)
-        if self.symtab.get(name) is not None: raise KeyError("forward {} would shadow existing name",name)
-
+    def forward(self,*args,**kwargs):
         inputs = [self.typeof(x) for x in args]
         ichain = None
         for T in reversed(inputs):
@@ -633,19 +737,19 @@ class DataflowGraph(object):
         for T in reversed(outputs):
             ochain = self.module.addtype(self.module.IF_Tuple,T,ochain)
 
-        result = self.forwards[name] = self.module.addtype(self.module.IF_Function,ichain,ochain)
-        return result
+        return self.module.addtype(self.module.IF_Function,ichain,ochain)
 
 
 module = DataflowGraph()
+import sap.interpreter
+I = sap.interpreter.Interpreter()
 
-if 1:
+if 0:
     class XYZ(module.struct):
         x = int
         y = float
         z = bool
 
-#fib = module.forward('fib',int,returns=int)
 
 if 0:
     class U(module.union):
@@ -653,16 +757,6 @@ if 0:
         c = int
         d = chr
 
-#@module(int)
-def fib(n):
-    if n < 2:
-        x = 1
-    else:
-        x = fib(n-1)+fib(n-2)
-    return x
-
-import sap.interpreter
-I = sap.interpreter.Interpreter()
 if 0:
     @module
     def three():
@@ -737,18 +831,40 @@ if 0:
     print module.module.interpret(I,comparetest,100,200)
     print
 
-if 1:
+if 0:
     @module(int,int)
     def iftest(x,y):
         if x < y:
-            z = 100
+            z = x + 1000
+        elif x > y:
+            z = x + 100000
         else:
-            if x > y:
-                z = 200
-            else:
-                z = 0
+            z = x + 100000000
         return z
+    print module.module.interpret(I,iftest,10,20)
+    print module.module.interpret(I,iftest,100,20)
+    print module.module.interpret(I,iftest,10,10)
 
-print module.forwards
-print module.symtab
+if 0:
+    @module(int)
+    def f(x):
+        return x + 1
+    print module.module.interpret(I,f,10.0)
 
+    @module(int)
+    def g(x):
+        return f(x*10)
+    print module.module.interpret(I,g,10)
+
+
+
+if 1:
+    fib = module.forward(int,returns=int)
+    @module(int)
+    def fib(n):
+        if n < 2:
+            x = 1
+        else:
+            x = fib(n-1)+fib(n-2)
+        return x
+    print module.module.interpret(I,fib,10)

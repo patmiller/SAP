@@ -47,6 +47,8 @@ public:
 			       std::shared_ptr<graph>);
   static PyObject* lshift(PyObject*,PyObject*);
 
+  static PyObject* set(PyObject*,PyObject*);
+
   static PyObject* get_dst(PyObject*,void*);
   static PyObject* get_port(PyObject*,void*);
   static PyObject* get_literal(PyObject*,void*);

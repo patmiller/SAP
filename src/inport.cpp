@@ -19,8 +19,21 @@ void inport::setup() {
 }
 
 PyMethodDef inport::methods[] = {
+  {(char*)"set",inport::set,METH_VARARGS,"TBD set"},
   {nullptr}
 };
+
+PyObject* inport::set(PyObject* self,PyObject* args) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  const char* lit = nullptr;
+  PyObject* ltype = nullptr;
+  if (!PyArg_ParseTuple(args,"sO!",&lit,&type::Type,&ltype)) return nullptr;
+  cxx->literal = lit;
+  cxx->weakliteral_type = reinterpret_cast<type::python*>(ltype)->cxx;
+  cxx->weakport.reset();
+  Py_INCREF(self);
+  return self;
+}
 
 PyGetSetDef inport::getset[] = {
   {(char*)"dst",inport::get_dst,nullptr,(char*)"TBD dst",nullptr},
