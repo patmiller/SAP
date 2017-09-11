@@ -2,6 +2,7 @@ import ast
 import inspect
 import sys
 import types
+import os
 import sap.if1
 
 class SemanticError(Exception):
@@ -33,6 +34,7 @@ class NotAFunction(SemanticError): pass
 class IF1Wiring(ast.NodeVisitor):
     def __init__(self,function,compiler):
         self.function = function
+        self.path = function.func_globals.get('__file__')
         self.compiler = compiler
         self.symtab = compiler.symtab
         self.reversepolish = []
@@ -47,6 +49,16 @@ class IF1Wiring(ast.NodeVisitor):
         self.string = module.string
         return
 
+    def newnode(self,opcode,N=None):
+        node = self.symtab.context.addnode(opcode)
+        if N is not None:
+            sl = getattr(N,'lineno',None)
+            if sl is not None:
+                node.pragmas['sl'] = sl
+        if self.path is not None:
+            node.pragmas['sf'] = os.path.split(self.path)[-1]
+        return node
+
     def visit_Expr(self,node):
         raise NoEffect(self.compiler,node,'Expression has no effect')
 
@@ -58,7 +70,7 @@ class IF1Wiring(ast.NodeVisitor):
         values = sum((self.visit(n) for n in node.args),())
 
         # A node to make the call
-        call = self.symtab.context.addnode(self.module.IFCall)
+        call = self.newnode(self.module.IFCall,node)
 
         # Look up the function implementation or forward
         fname = node.func.id
@@ -120,7 +132,7 @@ class IF1Wiring(ast.NodeVisitor):
             b = self.visit(right)
             if len(b) != 1:
                 raise ArityError(self.compiler,node,'Right operand does not have arity 1')
-            cmp = self.symtab.context.addnode(self.visit(op))
+            cmp = self.newnode(self.visit(op),op)
             cmp[1] = self.module.boolean
 
             allcheck.append(cmp[1])
@@ -140,7 +152,7 @@ class IF1Wiring(ast.NodeVisitor):
             a = b
 
         # We need *all* the comparisons to be true
-        all = self.symtab.context.addnode(self.module.IFAnd)
+        all = self.newnode(self.module.IFAnd,node)
         all[1] = self.module.boolean
         for port,v in enumerate(allcheck):
             all(port+1) << v
@@ -156,20 +168,6 @@ class IF1Wiring(ast.NodeVisitor):
     def visit_Str(self,node):
         r = repr(node.s)[1:-1].replace('"','\\%03o'%ord('"'))
         return ('"'+r+'"',)
-        '''
-        abuild = self.symtab.context.addnode(self.module.IFABuild)
-        abuild(1) << 0
-        for i,c in enumerate(node.s):
-            if c == '\\':
-                lit = "'\\'"
-            elif ' ' <= c <= '~':
-                lit = "'%s'"%c
-            else:
-                raise TODO(self.compiler,node,'unprintable char')
-            abuild(i+2) << lit
-        abuild[1] = self.string
-        print repr(node.s)
-        return (abuild[1],)'''
 
     def visit_Assign(self,node):
         # Assign(targets=[Tuple(Name(),Name(),...)]) ==> simple assignment
@@ -181,6 +179,8 @@ class IF1Wiring(ast.NodeVisitor):
             if len(names) != len(values):
                 raise ArityError(self.compiler,node,'{} names in lhs, but rhs has arity {}',len(names),len(values))
             for name,value in zip(names,values):
+                if isinstance(value,sap.if1.OutPort):
+                    value.pragmas['na'] = name.id
                 if name.id in self.symtab:
                     raise SingleAssignment(self.compiler,name,'Single assignment violation for {}',name.id)
                 self.symtab[name.id] = value
@@ -193,6 +193,9 @@ class IF1Wiring(ast.NodeVisitor):
                 raise ArityError(self.compiler,node.value,'one value on the LHS, but {} values on the right',len(value))
             if name in self.symtab:
                 raise SingleAssignment(self.compiler,node.targets[0],'Single assignment violation for {}',name)
+            v = value[0]
+            if isinstance(v,sap.if1.OutPort):
+                v.pragmas['na'] = name
             self.symtab[name] = value[0]
             return
 
@@ -275,7 +278,7 @@ class IF1Wiring(ast.NodeVisitor):
         common,a,b = self.coerce_arithmetic(n,a,b)
 
         # Add the appropriate node
-        operation = self.symtab.context.addnode(opcode)
+        operation = self.newnode(opcode,n)
         operation[1] = common
         operation(1) << a
         operation(2) << b
@@ -344,7 +347,7 @@ class IF1Wiring(ast.NodeVisitor):
         else:
             raise Unexpected(self.compiler,node,'Unexpected ast.BoolOp structure -- weird op value')
 
-        ifthen = self.symtab.context.addnode(self.module.IFIfThenElse)
+        ifthen = self.newnode(self.module.IFIfThenElse,node)
         ifthen[1] = self.module.boolean
         with self.symtab.addlevel(ifthen,self.compound_callback):
             # Each value gets a test:body pair (we must booleanize the value)
@@ -377,7 +380,7 @@ class IF1Wiring(ast.NodeVisitor):
         if len(v) != 1:
             raise ArityError(self.compiler,node,'test expression does not have arity-1')
 
-        ifthen = self.symtab.context.addnode(self.module.IFIfThenElse)
+        ifthen = self.newnode(self.module.IFIfThenElse,node)
         ifthen(1) << v[0]
         
         # Visit each set of assignments, but don't wire any final values to the graph yet
@@ -415,7 +418,7 @@ class IF1Wiring(ast.NodeVisitor):
         return
 
     def visit_Print(self,node):
-        peek = self.symtab.context.addnode(self.module.IFPeek)
+        peek = self.newnode(self.module.IFPeek,node)
         elements = sum((self.visit(child) for child in node.values),())
         spaced = sum(((v,"' '") for v in elements[:-1]),())
         if elements:
@@ -571,7 +574,7 @@ class DataflowGraph(object):
                     fields = m.addtype(cls.LINK,fieldtype,fields,name=fieldname)
                 R = m.addtype(cls.FLAVOR,fields,name=name)
 
-                if tree.sourcefile is not None: R.sf = tree.sourcefile
+                if tree.sourcefile is not None: R.sf = os.path.split(tree.sourcefile)[-1]
                 R.li = tree.lineno
 
                 # We build c'tor function (or functions) as well
@@ -626,6 +629,10 @@ class DataflowGraph(object):
         self.union = union
 
         return
+
+    @property
+    def if1(self):
+        return self.module.if1
 
     def typeof(self,x):
         if isinstance(x,sap.if1.Type):
@@ -739,132 +746,3 @@ class DataflowGraph(object):
 
         return self.module.addtype(self.module.IF_Function,ichain,ochain)
 
-
-module = DataflowGraph()
-import sap.interpreter
-I = sap.interpreter.Interpreter()
-
-if 0:
-    class XYZ(module.struct):
-        x = int
-        y = float
-        z = bool
-
-
-if 0:
-    class U(module.union):
-        a = float
-        c = int
-        d = chr
-
-if 0:
-    @module
-    def three():
-        return 3
-    print three.if1
-    print module.module.interpret(I,three)
-    print
-
-if 0:
-    @module(int)
-    def printer(x):
-        print 'hello',x
-        return x+4
-    print printer.if1
-    print module.module.interpret(I,printer,22)
-    print
-
-if 0:
-    @module(int)
-    def f(x):
-        return x+1
-    print f.if1
-    print module.module.interpret(I,f,2)
-    print
-
-if 0:
-    @module(int,float)
-    def g(x,y):
-        return x+y
-    print g.if1
-    print module.module.interpret(I,g)
-    print
-
-if 0:
-    @module(int,float)
-    def h(x,y):
-        a,b = x+y,3
-        return a-b-1
-    print h.if1
-    print module.module.interpret(I,h)
-    print
-
-if 0:
-    @module(int)
-    def andtest(x):
-        return 1 and 2 and 4.5 and x
-    print andtest.if1
-    print module.module.interpret(I,andtest,35)
-    print
-
-if 0:
-    @module(int)
-    def ortest(x):
-        return x or x
-    print ortest.if1
-    print module.module.interpret(I,ortest)
-    print
-
-if 0:
-    @module(int,int)
-    def comparetest(a,b):
-        return (
-            a < b < 100,
-            a <= b <= 20,
-            a == b == 20,
-            a > b > 100,
-            a >= b >= 100,
-            )
-    print module.module.interpret(I,comparetest,10,20)
-    print module.module.interpret(I,comparetest,20,10)
-    print module.module.interpret(I,comparetest,20,20)
-    print module.module.interpret(I,comparetest,100,200)
-    print
-
-if 0:
-    @module(int,int)
-    def iftest(x,y):
-        if x < y:
-            z = x + 1000
-        elif x > y:
-            z = x + 100000
-        else:
-            z = x + 100000000
-        return z
-    print module.module.interpret(I,iftest,10,20)
-    print module.module.interpret(I,iftest,100,20)
-    print module.module.interpret(I,iftest,10,10)
-
-if 0:
-    @module(int)
-    def f(x):
-        return x + 1
-    print module.module.interpret(I,f,10.0)
-
-    @module(int)
-    def g(x):
-        return f(x*10)
-    print module.module.interpret(I,g,10)
-
-
-
-if 1:
-    fib = module.forward(int,returns=int)
-    @module(int)
-    def fib(n):
-        if n < 2:
-            x = 1
-        else:
-            x = fib(n-1)+fib(n-2)
-        return x
-    print module.module.interpret(I,fib,10)
