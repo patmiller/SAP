@@ -17,6 +17,7 @@ char const* type::doc = "TBD Type";
 
 PyMethodDef type::methods[] = {
   {(char*)"chain",type::chain,METH_VARARGS,(char*)"TBD: chain chain"},
+  {(char*)"names",type::names,METH_VARARGS,(char*)"TBD: field or tuple or tag names"},
   {nullptr}
 };
 
@@ -53,7 +54,45 @@ PyObject* type::chain(PyObject* self, PyObject* args) {
   return result.incref();
 }
 
+PyObject* type::names(PyObject* self, PyObject* args) {
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+
+  switch(cxx->code) {
+  case IF_Field:
+  case IF_Tag:
+  case IF_Tuple:
+    break;
+
+  case IF_Record:
+  case IF_Union:
+    cxx = cxx->parameter1.lock();
+    break;
+
+  default:
+    return PyErr_Format(PyExc_TypeError,"unchainable type");
+  }
+
+  // How many?
+  ssize_t n = 0;
+  for(auto p=cxx; p; p = p->parameter2.lock()) n++;
+
+  STATIC_STR(NA,"na");
+  PyOwned result(PyTuple_New(n));
+  if (!result) return nullptr;
+  ssize_t i = 0;
+  for(auto p=cxx; p; p = p->parameter2.lock()) {
+    if (!p) return TODO("broken link");
+    PyObject* name /*borrowed*/ = PyDict_GetItem(p->pragmas.borrow(),NA);
+    if (!name) name = Py_None;
+    Py_INCREF(name);
+    PyTuple_SET_ITEM(result.borrow(),i,name);
+    ++i;
+  }
+  return result.incref();
+}
+
 PyGetSetDef type::getset[] = {
+  {(char*)"dtype",type::get_dtype,nullptr,(char*)"equivalent numpy dtype",nullptr},
   {(char*)"code",type::get_code,nullptr,(char*)"type code",nullptr},
   {(char*)"aux",type::get_aux,nullptr,(char*)"basic subcode (if any)",nullptr},
   {(char*)"parameter1",type::get_parameter1,nullptr,(char*)"first subtype (if any)",nullptr},
@@ -64,6 +103,91 @@ PyGetSetDef type::getset[] = {
   {(char*)"label",type::get_label,nullptr,(char*)"type label",nullptr},
   {nullptr}
 };
+
+PyObject* type::get_dtype(PyObject* self,void*) {
+  STATIC_STR(NA,"na");
+  STATIC_STR(DTYPE,"dtype");
+
+  auto cxx = reinterpret_cast<python*>(self)->cxx;
+  static PyObject* NUMPY = nullptr;
+  if (!NUMPY) {
+    NUMPY = PyImport_ImportModuleNoBlock("numpy");
+    if (!NUMPY) return nullptr;
+  }
+
+  switch(cxx->code) {
+  case IF_Array: {
+    return TODO("array");
+  };
+  case IF_Basic: {
+    switch(cxx->aux) {
+    case IF_Boolean:
+      return PyObject_GetAttrString(NUMPY,"bool_");
+    case IF_Character:
+      return PyObject_GetAttrString(NUMPY,"byte");
+    case IF_DoubleReal:
+      return PyObject_GetAttrString(NUMPY,"double");
+    case IF_Integer:
+      return PyObject_GetAttrString(NUMPY,"integer");
+    case IF_Null:
+      return PyObject_GetAttrString(NUMPY,"void");
+    case IF_Real:
+      return PyObject_GetAttrString(NUMPY,"float");
+    case IF_WildBasic:
+      return PyObject_GetAttrString(NUMPY,"void");
+    }
+  };
+  case IF_Field: {
+    return TODO("Field");
+  };
+  case IF_Function: {
+    return TODO("Function");
+  };
+  case IF_Multiple: {
+    return TODO("Multiple");
+  };
+  case IF_Record: {
+    auto chain = cxx->parameter1.lock();
+
+    // How many?
+    ssize_t n = 0;
+    for(auto p=chain; p; p = p->parameter2.lock()) n++;
+
+    PyOwned dtype(PyList_New(n));
+    if (!dtype) return nullptr;
+    ssize_t i = 0;
+    for(auto p=chain; p; p = p->parameter2.lock(),++i) {
+      PyOwned T(p->parameter1.lock()->lookup());
+      PyOwned element(PyTuple_New(2));
+      if (!element) return nullptr;
+      PyObject* name /*borrowed*/ = PyDict_GetItem(p->pragmas.borrow(),NA);
+      Py_INCREF(name);
+      PyTuple_SET_ITEM(element.borrow(),0,name);
+      PyTuple_SET_ITEM(element.borrow(),1,PyObject_GetAttr(T.borrow(),DTYPE));
+
+      PyList_SET_ITEM(dtype.borrow(),i,element.incref());
+    }
+
+    return dtype.incref();
+  };
+  case IF_Stream: {
+    return TODO("Stream");
+  };
+  case IF_Tag: {
+    return TODO("Tag");
+  };
+  case IF_Tuple: {
+    return TODO("Tuple");
+  };
+  case IF_Union: {
+    return TODO("Union");
+  };
+  case IF_Wild: {
+    return TODO("Wild");
+  };
+  }    
+  Py_RETURN_NONE;
+}
 
 PyObject* type::get_code(PyObject* self,void*) {
   auto cxx = reinterpret_cast<python*>(self)->cxx;
@@ -133,7 +257,7 @@ PyObject* type::get_if1(PyObject* self,void*) {
     break;
 
     // One parameter case
-  case IF_Array:
+  case  IF_Array:
   case IF_Multiple:
   case IF_Record:
   case IF_Stream:

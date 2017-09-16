@@ -28,6 +28,7 @@ class type : public IF1<type> {
 
   static PyObject* nb_int(PyObject*);
 
+  static PyObject* get_dtype(PyObject*,void*);
   static PyObject* get_code(PyObject*,void*);
   static PyObject* get_aux(PyObject*,void*);
   static PyObject* get_parameter1(PyObject*,void*);
@@ -39,6 +40,7 @@ class type : public IF1<type> {
   static PyObject* get_label(PyObject*,void*);
 
   static PyObject* chain(PyObject*,PyObject*);
+  static PyObject* names(PyObject*,PyObject*);
 
   type();
   type(python* self, PyObject* args,PyObject* kwargs);  

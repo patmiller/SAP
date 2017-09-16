@@ -5,22 +5,70 @@ from sap.wiring import DataflowGraph
 
 class TestWiring(unittest.TestCase):
     def setUp(self):
-        self.module = DataflowGraph()
+        self.module = DataflowGraph(lineno=False)
         self.interpreter = sap.interpreter.Interpreter()
         return
 
     def test_struct(self):
+        global XYZ
         class XYZ(self.module.struct):
             x = int
             y = float
             z = bool
         self.assertEquals(self.module.module.functions[0].if1,
-'''X 18 "XYZ" %li=14 %sf=wiring_tests.py
+'''X 18 "XYZ" %sf=wiring_tests.py
 E 1 1 0 1 13
 N 1 143
 E 0 1 1 1 4 %na=x
 E 0 2 1 2 3 %na=y
 E 0 3 1 3 1 %na=z''')                          
+
+        @self.module(int)
+        def f(x):
+            return XYZ(x,2.5,True)
+
+        r = self.module.module.interpret(self.interpreter,f,100)[0]
+        self.assertEquals((100,2.5,True),(r['x'],r['y'],r['z']))
+
+        @self.module(XYZ)
+        def x(r):
+            return r.x
+        @self.module(XYZ)
+        def y(r):
+            return r.y
+        @self.module(XYZ)
+        def z(r):
+            return r.z
+
+        self.assertEquals((100,),self.module.module.interpret(self.interpreter,x,r))
+        self.assertEquals((2.5,),self.module.module.interpret(self.interpreter,y,r))
+        self.assertEquals((True,),self.module.module.interpret(self.interpreter,z,r))
+        return
+
+    def test_union(self):
+        class U(self.module.union):
+            a = float
+            c = int
+            d = chr
+        functions = {}
+        for f in self.module.module.functions:
+            functions[f.name] = f
+        self.assertEquals(set(functions),set(['U#a','U#c','U#d']))
+        self.assertEquals(functions['U#a'].if1,
+'''X 16 "U#a"
+E 1 1 0 1 13
+N 1 143
+E 0 1 1 1 3''')
+        self.assertEquals(functions['U#c'].if1,
+'''X 18 "U#c"
+E 1 1 0 1 13
+N 1 143
+E 0 1 1 2 4''')
+        self.assertEquals(functions['U#d'].if1,
+'''X 20 "U#d"
+E 1 1 0 1 13
+N 1 143
+E 0 1 1 3 2''')
         return
 
 

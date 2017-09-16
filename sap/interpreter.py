@@ -148,10 +148,15 @@ class Interpreter(object):
     def IFRangeGenerate(
         self, m, n, *args): raise NotImplementedError("IFRangeGenerate")
 
-    def IFRBuild(self, m, n, *args): raise NotImplementedError("IFRBuild")
+    def IFRBuild(self, m, n, *args):
+        import numpy
+        return numpy.array(args,dtype=n[1].type.dtype)
 
-    def IFRElements(
-        self, m, n, *args): raise NotImplementedError("IFRElements")
+    def IFRElements(self, m, n, *args):
+        r = args[0]
+        dtype = r.dtype
+        names = dtype.names
+        return tuple(r[names[o.port-1]] for o in n.outputs)
 
     def IFRReplace(self, m, n, *args): raise NotImplementedError("IFRReplace")
 

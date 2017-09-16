@@ -30,12 +30,14 @@ class NoEffect(SemanticError): pass
 class HigherOrderFunction(SemanticError): pass
 class UnknownName(SemanticError): pass
 class NotAFunction(SemanticError): pass
+class Invalid(SemanticError): pass
 
 class IF1Wiring(ast.NodeVisitor):
-    def __init__(self,function,compiler):
+    def __init__(self,function,compiler,lineno=True):
         self.function = function
         self.path = function.func_globals.get('__file__')
         self.compiler = compiler
+        self.lineno = lineno
         self.symtab = compiler.symtab
         self.reversepolish = []
 
@@ -52,7 +54,7 @@ class IF1Wiring(ast.NodeVisitor):
     def newnode(self,opcode,N=None):
         node = self.symtab.context.addnode(opcode)
         if N is not None:
-            sl = getattr(N,'lineno',None)
+            sl = getattr(N,'lineno',None) if self.lineno else None
             if sl is not None:
                 node.pragmas['sl'] = sl
         if self.path is not None:
@@ -61,6 +63,35 @@ class IF1Wiring(ast.NodeVisitor):
 
     def visit_Expr(self,node):
         raise NoEffect(self.compiler,node,'Expression has no effect')
+
+    def get_ctor(self,name,type):
+        # Do we have a type function with the right name?
+        for function in self.module.functions:
+            if function.name == name:
+                returns = function.type.parameter2.chain()
+                if len(returns) == 1 and returns[0] is type:
+                    return function.type
+        return None
+
+    def expect_arity1(self,v,node,msg,*args):
+        if len(v) == 1: return v[0]
+        raise ArityError(self.compiler,node,msg,*args)
+
+    def visit_Attribute(self,node):
+        r = self.expect_arity1(self.visit(node.value),node,'value has arity > 1, cannot access a field')
+        t = r.type
+        if t.code != self.module.IF_Record:
+            raise Unsupported(self.compiler,node,'was expecting a record... TODO: union')
+        try:
+            fieldno = r.type.names().index(node.attr)
+        except ValueError:
+            raise UnknownName(self.compiler,node,'No such field {} in record {}',node.attr,r.type)
+        fieldtype = r.type.chain()[fieldno]
+
+        relements = self.newnode(self.module.IFRElements,node)
+        relements(1) << r
+        relements[fieldno+1] = fieldtype
+        return (relements[fieldno+1],)
 
     def visit_Call(self,node):
         if not isinstance(node.func,ast.Name) or node.keywords or node.starargs or node.kwargs:
@@ -87,8 +118,12 @@ class IF1Wiring(ast.NodeVisitor):
             inputs =  ichain.chain() if ichain is not None else ()
             outputs = ftype.parameter2.chain()
         elif isinstance(f,sap.if1.Type):
-            if f.code != self.module.IF_Function:
-                raise Invalid(self.compiler,self.func,'This does not name a forwarded type')
+            if f.code == self.module.IF_Function:
+                pass
+            else:
+                f = self.get_ctor(fname,f)
+                if f is None:
+                    raise Invalid(self.compiler,node,'This does not name a forwarded function')
             call(1).set(fname,f)
             ichain = f.parameter1
             inputs =  ichain.chain() if ichain is not None else ()
@@ -103,16 +138,14 @@ class IF1Wiring(ast.NodeVisitor):
             raise ArityError(self.compiler,node,'{} expected {} arguments, but got {}',fname,len(inputs),len(values))
 
         # Check to see that the types match up
-        for i,(v,expected) in enumerate(zip(values,inputs)):
-            actual = v.type
+        for port,(v,expected) in enumerate(zip(values,inputs)):
+            call(port+2) << v
+            actual = call(port+2).type
             if expected is not actual:
-                raise TypeMismatch(self.compiler,node.args[i],
+                raise TypeMismatch(self.compiler,node.args[port],
                                    'Argument {} expected {}, but actual was {}',
-                                   i+1,expected,actual)
+                                   port+1,expected,actual)
 
-        # Now, at last, we can wire the inputs to the call
-        for port,arg in enumerate(values):
-            call(port+2) << arg
 
         # Now we just use the output chain to set outports and return those values
         results = []
@@ -207,8 +240,13 @@ class IF1Wiring(ast.NodeVisitor):
             return sum([self.visit(x) for x in node.elts],())
         raise TODO(self.compiler,node,'non-load tuple')
 
+    constants = {'True':True, 'False':False, 'None': None}
+    missing = object
     def visit_Name(self,node):
         if isinstance(node.ctx,ast.Load):
+            constant = self.constants.get(node.id,self.missing)
+            if constant is not self.missing:
+                return (constant,)
             v = self.symtab.get(node.id)
             if v is None:
                 raise Unknown(self.compiler,node,'Unknown name {}',node.id)
@@ -534,7 +572,8 @@ class Symtab(object):
         return self.stack[-1][0]
 
 class DataflowGraph(object):
-    def __init__(self,*args):
+    def __init__(self,lineno=True):
+        self.lineno = lineno
         m = self.module = sap.if1.Module()
         self.shortcuts = {
             bool : m.boolean,
@@ -557,6 +596,7 @@ class DataflowGraph(object):
             __metaclass__ = Meta
             LINK = self.module.IF_Field
             FLAVOR = self.module.IF_Record
+            LINENO = lineno
 
             @classmethod
             def create(cls,name):
@@ -575,7 +615,8 @@ class DataflowGraph(object):
                 R = m.addtype(cls.FLAVOR,fields,name=name)
 
                 if tree.sourcefile is not None: R.sf = os.path.split(tree.sourcefile)[-1]
-                R.li = tree.lineno
+                if cls.LINENO:
+                    R.li = tree.lineno
 
                 # We build c'tor function (or functions) as well
                 cls.ctor(R)
@@ -585,7 +626,7 @@ class DataflowGraph(object):
             def ctor(cls,R):
                 ctor = m.addfunction(R.name)
                 ctor.sf = R.sf
-                ctor.li = R.li
+                if cls.LINENO: ctor.li = R.li
                 chain = R.parameter1
                 N = ctor.addnode(m.IFRBuild)
                 N[1] = R
@@ -704,7 +745,7 @@ class DataflowGraph(object):
                 raise SemanticError(self,tree.body[-1] if tree.body else tree,'Function body must end with a return')
 
             # Generate the tree to make some values
-            visitor = IF1Wiring(f,self)
+            visitor = IF1Wiring(f,self,self.lineno)
             for node in tree.body[:-1]:
                 visitor.visit(node)
             results = visitor.visit(tree.body[-1].value)
