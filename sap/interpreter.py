@@ -3,7 +3,11 @@ import math
 class Interpreter(object):
     def IFForall(self,m,n,*args): raise NotImplementedError("IFForall")
     def IFSelect(self,m,n,*args): raise NotImplementedError("IFSelect")
-    def IFTagCase(self,m,n,*args): raise NotImplementedError("IFTagCase")
+    def IFTagCase(self,m,n,*args):
+        port,v = args[0]
+        G = n.children[port-1]
+        return m.interpret(self,G,*((v,)+args[1:]))
+
     def IFLoopA(self,m,n,*args): raise NotImplementedError("IFLoopA")
     def IFLoopB(self,m,n,*args): raise NotImplementedError("IFLoopB")
     def IFIfThenElse(self,m,n,*args):
@@ -149,8 +153,13 @@ class Interpreter(object):
         self, m, n, *args): raise NotImplementedError("IFRangeGenerate")
 
     def IFRBuild(self, m, n, *args):
-        import numpy
-        return numpy.array(args,dtype=n[1].type.dtype)
+        rtype = n[1].type
+        if rtype.code == m.IF_Record:
+            import numpy
+            return numpy.array(args,dtype=rtype.dtype)
+        input = n.inputs[0]
+        port = input.port
+        return ((port,args[0]),)
 
     def IFRElements(self, m, n, *args):
         r = args[0]

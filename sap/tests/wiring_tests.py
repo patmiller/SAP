@@ -46,37 +46,45 @@ E 0 3 1 3 1 %na=z''')
         return
 
     def test_union(self):
+        global U
         class U(self.module.union):
-            a = float
-            c = int
-            d = chr
+            f = float
+            i = int
+            c = chr
         functions = {}
         for f in self.module.module.functions:
             functions[f.name] = f
-        self.assertEquals(set(functions),set(['U#a','U#c','U#d']))
-        self.assertEquals(functions['U#a'].if1,
-'''X 16 "U#a"
+        self.assertEquals(set(functions),set(['U#f','U#i','U#c']))
+        self.assertEquals(functions['U#f'].if1,
+'''X 16 "U#f"
 E 1 1 0 1 13
 N 1 143
 E 0 1 1 1 3''')
-        self.assertEquals(functions['U#c'].if1,
-'''X 18 "U#c"
+        self.assertEquals(functions['U#i'].if1,
+'''X 18 "U#i"
 E 1 1 0 1 13
 N 1 143
 E 0 1 1 2 4''')
-        self.assertEquals(functions['U#d'].if1,
-'''X 20 "U#d"
+        self.assertEquals(functions['U#c'].if1,
+'''X 20 "U#c"
 E 1 1 0 1 13
 N 1 143
 E 0 1 1 3 2''')
+
+        @self.module(int)
+        def ubuild(x):
+            return U(i=x)
+
+        @self.module(U)
+        def uget(u):
+            return u.i
+
+        u = self.module.module.interpret(self.interpreter,ubuild,100)
+        self.assertEquals(((2,100),),u)
+        self.assertEqual((100,),
+                         self.module.module.interpret(self.interpreter,uget,u[0]))
         return
 
-
-if 0:
-    class U(module.union):
-        a = float
-        c = int
-        d = chr
 
 if 0:
     @module

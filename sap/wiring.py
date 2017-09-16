@@ -19,18 +19,19 @@ class SemanticError(Exception):
         super(SemanticError,self).__init__(msg)
         return
 
-class SingleAssignment(SemanticError): pass
-class NotSupported(SemanticError): pass
-class ArityError(SemanticError): pass
-class TODO(SemanticError): pass
 class Arithmetic(SemanticError): pass
-class Unknown(SemanticError): pass
-class TypeMismatch(SemanticError): pass
-class NoEffect(SemanticError): pass
+class ArityError(SemanticError): pass
 class HigherOrderFunction(SemanticError): pass
-class UnknownName(SemanticError): pass
-class NotAFunction(SemanticError): pass
 class Invalid(SemanticError): pass
+class NoEffect(SemanticError): pass
+class NotAFunction(SemanticError): pass
+class NotSupported(SemanticError): pass
+class SingleAssignment(SemanticError): pass
+class TODO(SemanticError): pass
+class TypeMismatch(SemanticError): pass
+class Unknown(SemanticError): pass
+class UnknownName(SemanticError): pass
+class Unsupported(SemanticError): pass
 
 class IF1Wiring(ast.NodeVisitor):
     def __init__(self,function,compiler,lineno=True):
@@ -80,25 +81,51 @@ class IF1Wiring(ast.NodeVisitor):
     def visit_Attribute(self,node):
         r = self.expect_arity1(self.visit(node.value),node,'value has arity > 1, cannot access a field')
         t = r.type
-        if t.code != self.module.IF_Record:
-            raise Unsupported(self.compiler,node,'was expecting a record... TODO: union')
+        names = r.type.names()
         try:
-            fieldno = r.type.names().index(node.attr)
+            fieldno = names.index(node.attr)
         except ValueError:
             raise UnknownName(self.compiler,node,'No such field {} in record {}',node.attr,r.type)
-        fieldtype = r.type.chain()[fieldno]
+        chain = r.type.chain()
+        fieldtype = chain[fieldno]
 
-        relements = self.newnode(self.module.IFRElements,node)
-        relements(1) << r
-        relements[fieldno+1] = fieldtype
-        return (relements[fieldno+1],)
+        # Records are pretty easy
+        if t.code == self.module.IF_Record:
+            relements = self.newnode(self.module.IFRElements,node)
+            relements(1) << r
+            relements[fieldno+1] = fieldtype
+            return (relements[fieldno+1],)
+
+        # Unions require a TagCase
+        tagcase = self.newnode(self.module.IFTagCase,node)
+        tagcase(1) << r
+        tagcase[1] = fieldtype
+
+        for i,ftype in enumerate(chain):
+            G = tagcase.addgraph()
+            G[1] = ftype
+            if i == fieldno:
+                G(1) << G[1]
+            else:
+                err = G.addnode(self.module.IFError)
+                err[1] = ftype
+                G(1) << err[1]
+        return (tagcase[1],)
+
 
     def visit_Call(self,node):
-        if not isinstance(node.func,ast.Name) or node.keywords or node.starargs or node.kwargs:
-            raise HigherOrderFunction(self.compiler,node,'Cannot use higher order function, named args, or a method here')
+        # Unions are the only things that use keywords, so we just special case that
+        if not node.args and node.keywords and len(node.keywords) == 1 and not node.starargs and not node.kwargs:
+            kw = node.keywords[0]
+            names = [kw.arg]
+            values = [self.expect_arity1(self.visit(kw.value),kw.value,'Expecting arity 1 for this union value')]
+        else:
+            if not isinstance(node.func,ast.Name) or node.keywords or node.starargs or node.kwargs:
+                raise HigherOrderFunction(self.compiler,node,'Cannot use higher order function, named args, or a method here')
 
-        # We build the parameters we pass in first so that we can do some type checking
-        values = sum((self.visit(n) for n in node.args),())
+            # We build the parameters we pass in first so that we can do some type checking
+            names = []
+            values = sum((self.visit(n) for n in node.args),())
 
         # A node to make the call
         call = self.newnode(self.module.IFCall,node)
@@ -108,6 +135,7 @@ class IF1Wiring(ast.NodeVisitor):
         f = self.function.func_globals.get(fname)
         if f is None:
             raise UnknownName(self.compiler,node.func,'Cannot find name {}',fname)
+        mangle = '#'.join([fname]+names)
 
         # OK, we can deal with one of two things now (and eventually a python thing)
         if isinstance(f,sap.if1.Graph):
@@ -121,10 +149,10 @@ class IF1Wiring(ast.NodeVisitor):
             if f.code == self.module.IF_Function:
                 pass
             else:
-                f = self.get_ctor(fname,f)
+                f = self.get_ctor(mangle,f)
                 if f is None:
                     raise Invalid(self.compiler,node,'This does not name a forwarded function')
-            call(1).set(fname,f)
+            call(1).set(mangle,f)
             ichain = f.parameter1
             inputs =  ichain.chain() if ichain is not None else ()
             outputs = f.parameter2.chain()
