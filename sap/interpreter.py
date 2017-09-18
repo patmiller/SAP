@@ -11,7 +11,6 @@ class Interpreter(object):
     def IFLoopA(self,m,n,*args): raise NotImplementedError("IFLoopA")
     def IFLoopB(self,m,n,*args): raise NotImplementedError("IFLoopB")
     def IFIfThenElse(self,m,n,*args):
-        assert args
         g = n.children[0] if args[0] else n.children[1]
         return m.interpret(self,g,*args)
     def IFIterate(self,m,n,*args):

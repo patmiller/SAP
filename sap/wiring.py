@@ -78,8 +78,11 @@ class IF1Wiring(ast.NodeVisitor):
         if len(v) == 1: return v[0]
         raise ArityError(self.compiler,node,msg,*args)
 
+    def visit_arity1(self,node,msg,*args):
+        return self.expect_arity1(self.visit(node),node,msg,*args)
+
     def visit_Attribute(self,node):
-        r = self.expect_arity1(self.visit(node.value),node,'value has arity > 1, cannot access a field')
+        r = self.visit_arity1(node.value,'value has arity > 1, cannot access a field')
         t = r.type
         names = r.type.names()
         try:
@@ -118,7 +121,7 @@ class IF1Wiring(ast.NodeVisitor):
         if not node.args and node.keywords and len(node.keywords) == 1 and not node.starargs and not node.kwargs:
             kw = node.keywords[0]
             names = [kw.arg]
-            values = [self.expect_arity1(self.visit(kw.value),kw.value,'Expecting arity 1 for this union value')]
+            values = [self.visit_arity1(kw.value,'Expecting arity 1 for this union value')]
         else:
             if not isinstance(node.func,ast.Name) or node.keywords or node.starargs or node.kwargs:
                 raise HigherOrderFunction(self.compiler,node,'Cannot use higher order function, named args, or a method here')
@@ -184,23 +187,16 @@ class IF1Wiring(ast.NodeVisitor):
         return tuple(results)
 
     def visit_Compare(self,node):
-        a = self.visit(node.left)
-        if len(a) != 1:
-            raise ArityError(self.compiler,node,'Left operand does not have arity 1')
-
+        left = self.visit_arity1(node.left,'Left operand does not have arity 1')
         allcheck = []
-        for port,(op,right) in enumerate(zip(node.ops,node.comparators)):
-            b = self.visit(right)
-            if len(b) != 1:
-                raise ArityError(self.compiler,node,'Right operand does not have arity 1')
+        for port,(op,rval) in enumerate(zip(node.ops,node.comparators)):
+            right = self.visit_arity1(rval,'Right operand does not have arity 1')
             cmp = self.newnode(self.visit(op),op)
             cmp[1] = self.module.boolean
 
             allcheck.append(cmp[1])
 
-            left = a[0]
             left_type = self.module.type_of_value(left)
-            right = b[0]
             right_type = self.module.type_of_value(right)
             if left_type is right_type:
                 cmp(1) << left
@@ -210,7 +206,7 @@ class IF1Wiring(ast.NodeVisitor):
                 cmp(1) << aa
                 cmp(2) << bb
 
-            a = b
+            left = right
 
         # We need *all* the comparisons to be true
         all = self.newnode(self.module.IFAnd,node)
@@ -249,15 +245,12 @@ class IF1Wiring(ast.NodeVisitor):
         
         if len(node.targets) == 1 and isinstance(node.targets[0],ast.Name):
             name = node.targets[0].id
-            value = self.visit(node.value)
-            if len(value) != 1:
-                raise ArityError(self.compiler,node.value,'one value on the LHS, but {} values on the right',len(value))
+            value = self.visit_arity1(node.value,'one value on the LHS, but multiple values on the right')
             if name in self.symtab:
                 raise SingleAssignment(self.compiler,node.targets[0],'Single assignment violation for {}',name)
-            v = value[0]
-            if isinstance(v,sap.if1.OutPort):
-                v.pragmas['na'] = name
-            self.symtab[name] = value[0]
+            if isinstance(value,sap.if1.OutPort):
+                value.pragmas['na'] = name
+            self.symtab[name] = value
             return
 
         raise TODO(self.compiler,node,'record and array update')
@@ -369,16 +362,12 @@ class IF1Wiring(ast.NodeVisitor):
         return self.module.IFOr
 
     def visit_BinOp(self,node):
-        a = self.visit(node.left)
-        if len(a) != 1:
-            raise ArityError(self.compiler,node,'Left operand does not have arity 1')
-        b = self.visit(node.right)
-        if len(a) != 1:
-            raise ArityError(self.compiler,node,'Right operand does not have arity 1')
+        a = self.visit_arity1(node.left,'Left operand does not have arity 1')
+        b = self.visit_arity1(node.right,'Right operand does not have arity 1')
 
         # Push a and b onto the stack and run the operator
-        self.reversepolish.append(a[0])
-        self.reversepolish.append(b[0])
+        self.reversepolish.append(a)
+        self.reversepolish.append(b)
         self.reversepolish.append(node)
         return self.visit(node.op)
 
@@ -401,7 +390,7 @@ class IF1Wiring(ast.NodeVisitor):
 
     def visit_BoolOp(self,node):
         # Implements as a short circuit.  We can likely optimize certain variants to use IFAnd and IFOr directly
-        # Start with an ifthenelse graph.  Each expression clause in the values becomes a test graph
+        # We test using an ifthenelse.  We always test the first expression, but others are guarded
         # For AND, if we see a false value, the value of the whole shebang is false. Only true if we pass
         # all tests.  We do this by booleanizing each value and then applying a NOT
         if isinstance(node.op,ast.And):
@@ -413,41 +402,44 @@ class IF1Wiring(ast.NodeVisitor):
         else:
             raise Unexpected(self.compiler,node,'Unexpected ast.BoolOp structure -- weird op value')
 
-        ifthen = self.newnode(self.module.IFIfThenElse,node)
-        ifthen[1] = self.module.boolean
-        with self.symtab.addlevel(ifthen,self.compound_callback):
-            # Each value gets a test:body pair (we must booleanize the value)
-            for operand in node.values:
-                # Add a test graph
-                T = ifthen.addgraph()
+        ctx = self.symtab.context
 
-                # If we have any inputs to the ifthen, they are visible to this graph
-                for inedge in ifthen.inputs:
-                    T[inedge.port] = inedge.type
+        def recurse(values):
+            if not values:
+                return not rvalue
 
-                # We add a new context with this graph
-                with self.symtab.addlevel(T,graph_callback):
-                    v = self.visit(operand)
-                    if len(v) > 1:
-                        raise ArityError(self.compiler,operand,'test value has arity > 1')
-                    b, = self.coerce_boolean(operand,v[0])
-                    T(1) << b
-                B = ifthen.addgraph()
-                B(1) << rvalue
+            # Set up the first value as a test
+            head = values[0]
+            v = self.visit_arity1(head,'expected test chain to have arity1 values')
+            b, = self.coerce_boolean(head,v)
+            if fix is not None:
+                fixer = self.newnode(fix,head)
+                fixer(1) << b
+                fixer[1] = self.module.boolean
+                b = fixer[1]
 
-        # If we didn't match, then we use !rvalue as the result (true for and, false for or)
-        E = ifthen.addgraph()
-        E(1) << (not rvalue)
-        return (ifthen[1],)
+            ifthen = self.newnode(self.module.IFIfThenElse,node)
+            ifthen(1) << b
+            ifthen[1] = self.module.boolean
+            T = ifthen.addgraph()
+            T[1] = self.module.boolean
+            T(1) << rvalue
+
+            with self.symtab.addlevel(ifthen,self.compound_callback):
+                F = ifthen.addgraph()
+                for out in T.outputs: F[out.port] = out.type
+                with self.symtab.addlevel(F,self.graph_callback):
+                    F(1) << recurse(values[1:])
+            return ifthen[1]
+
+        return (recurse(node.values),)
 
     def visit_If(self,node):
         # We generate the test in the current context (must have arity 1) and wire it to the ifthen
-        v = self.visit(node.test)
-        if len(v) != 1:
-            raise ArityError(self.compiler,node,'test expression does not have arity-1')
+        v = self.visit_arity1(node.test,'test expression does not have arity-1')
 
         ifthen = self.newnode(self.module.IFIfThenElse,node)
-        ifthen(1) << v[0]
+        ifthen(1) << v
         
         # Visit each set of assignments, but don't wire any final values to the graph yet
         with self.symtab.addlevel(ifthen,self.compound_callback) as compound:

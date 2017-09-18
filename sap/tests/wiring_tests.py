@@ -86,115 +86,153 @@ E 0 1 1 3 2''')
         return
 
 
-if 0:
-    @module
-    def three():
-        return 3
-    print three.if1
-    print module.module.interpret(I,three)
-    print
+    def test_three(self):
+        @self.module
+        def three():
+            return 3
+        self.assertEqual((3,),
+                         self.module.module.interpret(self.interpreter,three))
+        return
 
-if 0:
-    @module(int)
-    def printer(x):
-        print 'hello',x
-        return x+4
-    print printer.if1
-    print module.module.interpret(I,printer,22)
-    print
+    class capture(object):
+        def __enter__(self):
+            from cStringIO import StringIO
+            import sys
+            global stdout
+            self.stdout = sys.stdout
+            self.out = None
+            sys.stdout = StringIO()
+            return self
 
-if 0:
-    @module(int)
-    def f(x):
-        return x+1
-    print f.if1
-    print module.module.interpret(I,f,2)
-    print
+        def __exit__(self,a,b,c):
+            import sys
+            io = sys.stdout
+            sys.stdout = self.stdout
+            self.out = io.getvalue()
+            return
+            
 
-if 0:
-    @module(int,float)
-    def g(x,y):
-        return x+y
-    print g.if1
-    print module.module.interpret(I,g,10,20)
-    print
+    def test_printer(self):
+        @self.module(int)
+        def printer(x):
+            print 'hello',x
+            return x+4
+        with self.capture() as io:
+            x = self.module.module.interpret(self.interpreter,printer,22)
+        self.assertEqual((26,),x)
+        self.assertEqual(io.out,'hello 22\n')
+        return
 
-if 0:
-    @module(int,float)
-    def h(x,y):
-        a,b = x+y,3
-        return a-b-1
-    print h.if1
-    print module.module.interpret(I,h)
-    print
+    def test_plus(self):
+        @self.module(int)
+        def f(x):
+            return x+1
+        self.assertEqual((3,),
+                         self.module.module.interpret(self.interpreter,f,2))
+        return
 
-if 0:
-    @module(int)
-    def andtest(x):
-        return 1 and 2 and 4.5 and x
-    print andtest.if1
-    print module.module.interpret(I,andtest,35)
-    print
+    def test_mixed(self):
+        @self.module(int,float)
+        def g(x,y):
+            return x+y
+        self.assertEquals((30,),self.module.module.interpret(self.interpreter,g,10,20))
+        return
 
-if 0:
-    @module(int)
-    def ortest(x):
-        return x or x
-    print ortest.if1
-    print module.module.interpret(I,ortest)
-    print
+    def test_(self):
+        @self.module(int,float)
+        def h(x,y):
+            a,b = x+y,3
+            return a-b-1
+        self.assertEquals((26.5,),self.module.module.interpret(self.interpreter,h,10,20.5))
+        return
 
-if 0:
-    @module(int,int)
-    def comparetest(a,b):
-        return (
-            a < b < 100,
-            a <= b <= 20,
-            a == b == 20,
-            a > b > 100,
-            a >= b >= 100,
-            )
-    print module.module.interpret(I,comparetest,10,20)
-    print module.module.interpret(I,comparetest,20,10)
-    print module.module.interpret(I,comparetest,20,20)
-    print module.module.interpret(I,comparetest,100,200)
-    print
+    def test_and(self):
+        @self.module(int,int,int)
+        def andtest(x,y,z):
+            return x and y and z
 
-if 0:
-    @module(int,int)
-    def iftest(x,y):
-        if x < y:
-            z = x + 1000
-        elif x > y:
-            z = x + 100000
-        else:
-            z = x + 100000000
-        return z
-    print module.module.interpret(I,iftest,10,20)
-    print module.module.interpret(I,iftest,100,20)
-    print module.module.interpret(I,iftest,10,10)
+        self.assertEquals((False,),self.module.module.interpret(self.interpreter,andtest,0,0,0))
+        self.assertEquals((False,),self.module.module.interpret(self.interpreter,andtest,0,0,1))
+        self.assertEquals((False,),self.module.module.interpret(self.interpreter,andtest,0,1,0))
+        self.assertEquals((False,),self.module.module.interpret(self.interpreter,andtest,0,1,1))
+        self.assertEquals((False,),self.module.module.interpret(self.interpreter,andtest,1,0,0))
+        self.assertEquals((False,),self.module.module.interpret(self.interpreter,andtest,1,0,1))
+        self.assertEquals((False,),self.module.module.interpret(self.interpreter,andtest,1,1,0))
+        self.assertEquals((True,),self.module.module.interpret(self.interpreter,andtest,1,1,1))
+        return
 
-if 0:
-    @module(int)
-    def f(x):
-        return x + 1
-    print module.module.interpret(I,f,10.0)
+    def test_or(self):
+        @self.module(int,int,int)
+        def ortest(x,y,z):
+            return x or y or z
+        self.assertEquals((False,),self.module.module.interpret(self.interpreter,ortest,0,0,0))
+        self.assertEquals((True,),self.module.module.interpret(self.interpreter,ortest,0,0,1))
+        self.assertEquals((True,),self.module.module.interpret(self.interpreter,ortest,0,1,0))
+        self.assertEquals((True,),self.module.module.interpret(self.interpreter,ortest,0,1,1))
+        self.assertEquals((True,),self.module.module.interpret(self.interpreter,ortest,1,0,0))
+        self.assertEquals((True,),self.module.module.interpret(self.interpreter,ortest,1,0,1))
+        self.assertEquals((True,),self.module.module.interpret(self.interpreter,ortest,1,1,0))
+        self.assertEquals((True,),self.module.module.interpret(self.interpreter,ortest,1,1,1))
+        return
 
-    @module(int)
-    def g(x):
-        return f(x*10)
-    print module.module.interpret(I,g,10)
+    def test_compares(self):
+        @self.module(int,int)
+        def comparetest(a,b):
+            return (
+                a < b < 100,
+                a <= b <= 20,
+                a == b == 20,
+                a > b > 100,
+                a >= b >= 100,
+                )
+        self.assertEquals((True,True,False,False,False,),
+                          self.module.module.interpret(self.interpreter,comparetest,10,20))
+        self.assertEquals((False,False,False,False,False,),
+                          self.module.module.interpret(self.interpreter,comparetest,20,10))
+        self.assertEquals((False,True,True,False,False,),
+                          self.module.module.interpret(self.interpreter,comparetest,20,20))
+        self.assertEquals((False,False,False,False,False,),
+                          self.module.module.interpret(self.interpreter,comparetest,100,200))
+        return
 
+    def test_if_elif(self):
+        @self.module(int,int)
+        def iftest(x,y):
+            if x < y:
+                z = x + 1000
+            elif x > y:
+                z = x + 100000
+            else:
+                z = x + 100000000
+            return z
+        self.assertEquals((1010,),self.module.module.interpret(self.interpreter,iftest,10,20))
+        self.assertEquals((100100,),self.module.module.interpret(self.interpreter,iftest,100,20))
+        self.assertEquals((100000010,),self.module.module.interpret(self.interpreter,iftest,10,10))
+        return
 
+    def test_simple_call(self):
+        global f,g
 
-if 0:
-    fib = module.forward(int,returns=int)
-    @module(int)
-    def fib(n):
-        if n < 2:
-            x = 1
-        else:
-            x = fib(n-1)+fib(n-2)
-        return x
-    print module.module.interpret(I,fib,10)
-    print fib.if1
+        @self.module(int)
+        def f(x):
+            return x + 1
+        self.assertEquals((11,),self.module.module.interpret(self.interpreter,f,10))
+
+        @self.module(int)
+        def g(x):
+            return f(x*10)
+        self.assertEquals((101,),self.module.module.interpret(self.interpreter,g,10))
+        return
+
+    def test_fib(self):
+        global fib
+        fib = self.module.forward(int,returns=int)
+        @self.module(int)
+        def fib(n):
+            if n < 2:
+                x = 1
+            else:
+                x = fib(n-1)+fib(n-2)
+            return x
+        self.assertEquals((89,),self.module.module.interpret(self.interpreter,fib,10))
+        return
